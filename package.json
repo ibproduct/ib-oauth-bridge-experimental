@@ -1,0 +1,38 @@
+{
+  "name": "ib-oauth",
+  "version": "0.1.0",
+  "description": "OAuth 2.0 bridge service for IntelligenceBank",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "build:cdk": "tsc -p cdk/tsconfig.json",
+    "test": "jest",
+    "cdk": "cdk",
+    "cdk:synth": "cdk synth",
+    "cdk:deploy:dev": "cdk deploy IBOAuthDevStack",
+    "cdk:deploy:prod": "cdk deploy IBOAuthProdStack",
+    "cdk:diff": "cdk diff"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.x",
+    "@aws-sdk/lib-dynamodb": "^3.x",
+    "axios": "^1.x",
+    "jose": "^5.x",
+    "uuid": "^9.x",
+    "zod": "^3.x"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.x",
+    "@types/jest": "^29.x",
+    "@types/node": "^20.x",
+    "aws-cdk-lib": "^2.x",
+    "esbuild": "^0.19.x",
+    "jest": "^29.x",
+    "ts-jest": "^29.x",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.x"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
