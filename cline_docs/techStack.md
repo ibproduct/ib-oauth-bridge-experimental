@@ -76,30 +76,35 @@
   * Error tracking
 
 ## Dependencies
-
-### Production Dependencies
+### Dependencies
 ```json
 {
+  "axios": "^1.x",
+  "uuid": "^9.x",
+  "zod": "^3.x",
   "@aws-sdk/client-dynamodb": "^3.x",
   "@aws-sdk/lib-dynamodb": "^3.x",
-  "axios": "^1.x",
-  "jose": "^5.x",
-  "uuid": "^9.x",
-  "zod": "^3.x"
+  "express": "^4.x"
 }
+```
 ```
 
 ### Development Dependencies
 ```json
 {
-  "@types/aws-lambda": "^8.x",
-  "@types/jest": "^29.x",
+  "@types/express": "^4.x",
+  "@types/cors": "^2.x",
   "@types/node": "^20.x",
+  "@types/pg": "^8.x",
+  "@types/jest": "^29.x",
+  "@types/aws-lambda": "^8.x",
   "aws-cdk-lib": "^2.x",
   "esbuild": "^0.19.x",
   "jest": "^29.x",
   "ts-jest": "^29.x",
-  "typescript": "^5.x"
+  "typescript": "^5.x",
+  "nodemon": "^3.x",
+  "ts-node": "^10.x"
 }
 ```
 
@@ -111,15 +116,19 @@
 AWS_REGION=us-west-1  # Mandatory
 STAGE=dev|prod
 
-# IntelligenceBank Configuration
-IB_PLATFORM_URL=https://example.intelligencebank.com
-IB_API_KEY=your-api-key
+# AWS Configuration
+AWS_REGION=us-west-1  # Mandatory
+AWS_PROFILE=default
+STAGE=dev|prod
+
+# Server Configuration
+PORT=3001  # For local development
+NODE_ENV=development|production
 
 # OAuth Configuration
 OAUTH_ISSUER=https://oauth.yourdomain.com
 OAUTH_AUDIENCE=your-audience
-JWT_PRIVATE_KEY=base64-encoded-private-key
-JWT_PUBLIC_KEY=base64-encoded-public-key
+JWT_SECRET=your-secret-key
 
 # Security Configuration
 TOKEN_EXPIRY=3600
@@ -157,34 +166,28 @@ REFRESH_TOKEN_EXPIRY=2592000
 - Burst: 2000 requests
 - Cache enabled for production
 
-## Security Measures
+## Security Implementation
 
-### API Security
-- WAF rules enabled
-- Rate limiting per IP
-- Request size limits
-
-### Data Protection
-- At-rest encryption (DynamoDB)
-- In-transit encryption (TLS)
-- Key rotation policy
+### Security Features
+- Request validation with Zod ✅
+- JWT token handling ✅
+- DynamoDB encryption at rest ✅
+- HTTPS via API Gateway ✅
+- IAM roles and policies ✅
 
 ### Access Control
-- IAM roles per function
-- Least privilege principle
+- Client application registration
+- AWS IAM roles per function
 - Resource-based policies
 
-## Monitoring & Alerting
+## Monitoring Implementation
 
-### CloudWatch Alarms
-- Error rate threshold: 1%
-- Latency threshold: p95 < 1s
-- 4xx/5xx rate threshold: 5%
-
-### Health Checks
-- API endpoint monitoring
-- DynamoDB health
-- Lambda execution monitoring
+### CloudWatch Integration
+- Lambda function logs ✅
+- API Gateway metrics ✅
+- DynamoDB monitoring ✅
+- Error tracking ✅
+- Custom metrics ✅
 
 ## Resource Tags
 All resources must have these tags:

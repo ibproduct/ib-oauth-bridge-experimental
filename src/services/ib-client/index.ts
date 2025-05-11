@@ -1,40 +1,43 @@
 import axios, { AxiosInstance } from 'axios';
 
 export interface IBAuthResponse {
-  SID: string;
-  content: string;
+  sid: string;
+  content: string | {
+    apiV3url: string;
+    clientid: string;
+  };
 }
 
 export interface IBSessionInfo {
-  session: {
-    id: string;
-    user: {
-      id: string;
-      email: string;
-      firstName: string;
-      lastName: string;
+  SID: string;
+  content: {
+    session: {
+      sid: string;
+      userUuid: string;
+      loginTime: number;
+    };
+    info: {
+      clientid: string;
+      apiV3url: string;
+      firstname: string;
+      lastname: string;
+      useruuid: string;
+      email?: string;
     };
   };
 }
 
 export class IBClient {
-  private client: AxiosInstance;
-  private platformUrl: string;
-  private apiKey: string;
+  private client?: AxiosInstance;
 
-  constructor() {
-    this.platformUrl = process.env.IB_PLATFORM_URL || '';
-    this.apiKey = process.env.IB_API_KEY || '';
-
-    if (!this.platformUrl || !this.apiKey) {
-      throw new Error('Missing required IB configuration');
-    }
-
+  /**
+   * Initialize client with platform URL
+   */
+  private initializeClient(platformUrl: string): void {
     this.client = axios.create({
-      baseURL: this.platformUrl,
+      baseURL: platformUrl,
       headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': this.apiKey
+        'Content-Type': 'application/json'
       }
     });
 
@@ -55,11 +58,14 @@ export class IBClient {
 
   /**
    * Get initial authentication token from IB
+   * @param platformUrl IntelligenceBank platform URL
    * @returns Promise<IBAuthResponse>
    */
-  async getInitialToken(): Promise<IBAuthResponse> {
+  async getInitialToken(platformUrl: string): Promise<IBAuthResponse> {
+    this.initializeClient(platformUrl);
     try {
-      const response = await this.client.post('/api/v2/auth/token');
+      if (!this.client) throw new Error('Client not initialized');
+      const response = await this.client.post('/v1/auth/app/token');
       return response.data;
     } catch (error) {
       throw new Error('Failed to get initial token from IntelligenceBank');
@@ -68,36 +74,78 @@ export class IBClient {
 
   /**
    * Get session information using SID
+   * @param platformUrl IntelligenceBank platform URL
    * @param sid Session ID from IB
    * @returns Promise<IBSessionInfo>
    */
-  async getSessionInfo(sid: string): Promise<IBSessionInfo> {
+  async getSessionInfo(platformUrl: string, sid: string): Promise<IBSessionInfo> {
+    this.initializeClient(platformUrl);
     try {
-      const response = await this.client.get('/api/v2/auth/session', {
-        headers: {
-          'X-Session-ID': sid
-        }
-      });
+      if (!this.client) throw new Error('Client not initialized');
+      const response = await this.client.get(`/v1/auth/app/info?token=${sid}`);
       return response.data;
     } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        throw new Error('Authentication pending');
+      }
       throw new Error('Failed to get session information from IntelligenceBank');
     }
   }
 
   /**
    * Generate IB login URL
+   * @param platformUrl IntelligenceBank platform URL
    * @param token Initial token from getInitialToken
    * @param redirectUri OAuth redirect URI
+   * @param state OAuth state parameter
    * @returns string Login URL
    */
-  generateLoginUrl(token: string, redirectUri: string, state: string): string {
+  generateLoginUrl(
+    platformUrl: string,
+    token: string,
+    redirectUri: string,
+    state: string
+  ): string {
     const params = new URLSearchParams({
+      login: '0',
       token,
       redirect_uri: redirectUri,
       state
     });
     
-    return `${this.platformUrl}/auth/login?${params.toString()}`;
+    return `${platformUrl}/auth/?${params.toString()}`;
+  }
+
+  /**
+   * Poll for session completion
+   * @param platformUrl IntelligenceBank platform URL
+   * @param sid Session ID to poll
+   * @param maxAttempts Maximum number of polling attempts
+   * @param interval Polling interval in milliseconds
+   * @returns Promise<IBSessionInfo>
+   */
+  async pollSessionCompletion(
+    platformUrl: string,
+    sid: string,
+    maxAttempts: number = 60,
+    interval: number = 5000
+  ): Promise<IBSessionInfo> {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const sessionInfo = await this.getSessionInfo(platformUrl, sid);
+        return sessionInfo;
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Authentication pending') {
+          if (attempt === maxAttempts - 1) {
+            throw new Error('Authentication timeout');
+          }
+          await new Promise(resolve => setTimeout(resolve, interval));
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error('Authentication timeout');
   }
 }
 

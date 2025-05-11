@@ -13,9 +13,10 @@ This architecture proposes an OAuth 2.0 compatible bridge for IntelligenceBank's
 
 ### 2. AWS Lambda Functions
 - **Authorization Handler**
-  * Initiates IB browser login flow
-  * Generates and stores state parameter
-  * Maps to IB's Step 1 (get token) and Step 2 (browser redirect)
+  * GET /v1/auth/app/token - Get initial token
+  * Redirect to /auth/?login=0&token={content}
+  * Poll GET /v1/auth/app/info?token={content}
+  * Preserve OAuth state through flow
 
 - **Token Handler**
   * Exchanges authorization code for access token
@@ -49,18 +50,21 @@ This architecture proposes an OAuth 2.0 compatible bridge for IntelligenceBank's
      scope=openid profile&
      state=STATE
    ```
-   - Lambda generates IB token via Step 1
-   - Stores state mapping in DynamoDB
-   - Redirects to IB login (Step 2)
+   - GET /v1/auth/app/token for initial token
+   - Store state mapping with OAuth state
+   - Redirect to /auth/?login=0&token={content}
+   - Poll GET /v1/auth/app/info?token={content}
 
-2. **IB Login Callback**
-   ```
-   GET /callback?token=IB_TOKEN
-   ```
-   - Lambda validates IB token
-   - Exchanges for session info (Step 3)
-   - Generates authorization code
-   - Redirects to client callback URL
+2. **Browser Login Flow**
+    ```
+    1. GET /v1/auth/app/token
+    2. /auth/?login=0&token={content}
+    3. GET /v1/auth/app/info?token={content}
+    ```
+    - Get initial token from IB
+    - Redirect user to IB login
+    - Poll session status
+    - Generate authorization code when ready
 
 3. **Token Exchange**
    ```

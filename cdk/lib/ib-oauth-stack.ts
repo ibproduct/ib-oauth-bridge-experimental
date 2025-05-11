@@ -46,7 +46,7 @@ export class IBOAuthStack extends cdk.Stack {
 
     // Lambda Functions
     const authorizeFunction = new lambda.Function(this, 'AuthorizeFunction', {
-      functionName: `ib-oauth-authorizer-${props.stage}`,
+      functionName: `ib-oauth-authorize-${props.stage}`,
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('src/handlers/authorize'),
@@ -93,7 +93,7 @@ export class IBOAuthStack extends cdk.Stack {
 
     // API Gateway
     const api = new apigateway.RestApi(this, 'OAuthAPI', {
-      restApiName: `ib-oauth-${props.stage}-api`,
+      restApiName: `ib-oauth-api-${props.stage}`,
       description: 'OAuth 2.0 bridge service for IntelligenceBank',
       deployOptions: {
         stageName: props.stage,
@@ -114,7 +114,7 @@ export class IBOAuthStack extends cdk.Stack {
     userinfo.addMethod('GET', new apigateway.LambdaIntegration(userinfoFunction));
 
     // Stack Outputs
-    new cdk.CfnOutput(this, 'ApiEndpoint', {
+    new cdk.CfnOutput(this, 'IBOAuthApiEndpoint', {
       value: api.url,
       description: 'API Gateway endpoint URL',
     });

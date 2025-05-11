@@ -1,296 +1,202 @@
-# Testing Strategy
+# Testing Documentation
 
-## Overview
-This document outlines the testing strategy for the IntelligenceBank OAuth bridge service, ensuring reliability, security, and compliance with OAuth 2.0 standards.
+## Current Testing Setup
 
-## Test Categories
+### Manual Testing Environment
+1. Test Client
+   ```
+   URL: http://localhost:8081
+   Purpose: Simulate OAuth client application
+   Features:
+   - OAuth authorization flow
+   - Token exchange
+   - User info retrieval
+   - IB API test call
+   ```
 
-### 1. Unit Tests
+2. OAuth Server
+   ```
+   URL: http://localhost:3001
+   Endpoints:
+   - GET /authorize
+   - POST /token
+   - GET /userinfo
+   ```
 
-#### Core Components
-- **Token Service**
-  * JWT generation and validation
-  * Token format compliance
-  * Expiration handling
+### Test Flow Steps
 
-- **IB Client**
-  * API call formatting
-  * Response parsing
-  * Error handling
+1. Authorization Flow
+   ```
+   ✅ Click "Login with IntelligenceBank"
+   ✅ Enter platform URL
+   ✅ Redirect to IB login
+   🔄 Handle login completion
+   ```
 
-- **Storage Service**
-  * DynamoDB operations
-  * State management
-  * Data encryption
+2. Token Exchange
+   ```
+   🔄 Receive authorization code
+   🔄 Exchange for tokens
+   🔄 Verify token format
+   ```
 
-#### Test Requirements
-- 90% code coverage minimum
-- Mocked external dependencies
-- Isolated test environment
+3. User Info
+   ```
+   ❌ Send access token
+   ❌ Receive user info
+   ❌ Verify claims
+   ```
 
-### 2. Integration Tests
+### Test Cases Needed
 
-#### API Endpoints
-- **Authorization Endpoint**
-  * State parameter generation
-  * IB token retrieval
-  * Redirect handling
-  * Error scenarios
+1. Authorization Endpoint
+   ```
+   - Missing platform URL -> Show form
+   - Invalid platform URL -> Show error
+   - Valid platform URL -> Start IB login
+   - Invalid OAuth params -> Show error
+   ```
 
-- **Token Endpoint**
-  * Authorization code validation
-  * Token issuance
-  * Refresh token handling
-  * Error responses
+2. Token Endpoint
+   ```
+   - Valid code -> Return tokens
+   - Invalid code -> Error
+   - Missing params -> Error
+   - Expired code -> Error
+   ```
 
-- **UserInfo Endpoint**
-  * Token validation
-  * Profile data retrieval
-  * Data mapping
-  * Error handling
+3. UserInfo Endpoint
+   ```
+   - Valid token -> Return claims
+   - Invalid token -> Error
+   - Expired token -> Error
+   ```
 
-#### External Services
-- DynamoDB interactions
-- IB API integration
-- AWS service integration
+4. Error Cases
+   ```
+   - Network errors
+   - IB API errors
+   - Timeout errors
+   - Validation errors
+   ```
 
-### 3. End-to-End Tests
+### Required Test Coverage
 
-#### Authentication Flows
-- Complete OAuth flow
-- IB login integration
-- Token exchange process
-- User data retrieval
+1. OAuth Flow
+   ```
+   - Complete authorization flow
+   - Token exchange flow
+   - User info retrieval
+   - Error handling
+   ```
 
-#### Security Tests
-- Token encryption
-- HTTPS enforcement
-- CORS compliance
-- Rate limiting
+2. IB Integration
+   ```
+   - GET /v1/auth/app/token - Initial token
+   - /auth/?login=0&token={content} - Browser login
+   - GET /v1/auth/app/info?token={content} - Session polling
+   - State preservation through flow
+   ```
 
-### 4. Performance Tests
+3. Token Handling
+   ```
+   - Token generation
+   - Token validation
+   - Token refresh
+   - Token storage
+   ```
 
-#### Load Testing
-- Concurrent user simulation
-- Token generation load
-- Database operation speed
-- API response times
+4. Security
+   ```
+   - Parameter validation
+   - Token encryption
+   - Error handling
+   - Rate limiting
+   ```
 
-#### Stress Testing
-- Maximum load handling
-- Error recovery
-- Resource utilization
-- Throttling behavior
+### Test Environment Setup
 
-## Test Environments
+1. Local Development
+   ```bash
+   # Start test client
+   cd tests && node server.js
+   
+   # Start OAuth server
+   cd src && node dev-server.js
+   ```
 
-### Local Development
-```bash
-# Environment variables
-TEST_IB_API_URL=mock-server
-TEST_DB_ENDPOINT=localhost:8000
-```
+2. Required Test Data
+   ```
+   - Valid platform URL
+   - Test client credentials
+   - Test user account
+   ```
 
-### CI/CD Pipeline
-```bash
-# Environment variables
-TEST_IB_API_URL=test-api.intelligencebank.com
-TEST_DB_ENDPOINT=dynamodb.local
-```
+### Current Test Status
 
-### Staging
-```bash
-# Environment variables
-TEST_IB_API_URL=staging-api.intelligencebank.com
-TEST_DB_ENDPOINT=dynamodb.aws
-```
+1. Completed Tests
+   ```
+   ✅ Basic server setup
+   ✅ Platform URL form
+   ✅ IB login redirect
+   ```
 
-## Test Implementation
+2. In Progress
+   ```
+   🔄 Token exchange
+   🔄 Session polling
+   🔄 Error handling
+   ```
 
-### 1. Test Framework Setup
+3. Pending Tests
+   ```
+   ❌ Token validation
+   ❌ User info endpoint
+   ❌ Security features
+   ```
 
-```typescript
-// jest.config.ts
-export default {
-  preset: 'ts-jest',
-  testEnvironment: 'node',
-  coverageThreshold: {
-    global: {
-      branches: 90,
-      functions: 90,
-      lines: 90,
-      statements: 90
-    }
-  },
-  setupFiles: ['./test/setup.ts']
-};
-```
+### Next Steps
 
-### 2. Mock Services
+1. Immediate
+   ```
+   - Test GET /v1/auth/app/token response
+   - Test /auth/ redirect with token
+   - Test GET /v1/auth/app/info polling
+   - Verify state preservation
+   ```
 
-```typescript
-// test/mocks/ib-api.mock.ts
-export class MockIBAPI {
-  async getToken() {
-    return {
-      SID: 'test-sid',
-      content: 'test-token'
-    };
-  }
-  
-  async getSessionInfo() {
-    return {
-      session: {/* mock data */},
-      info: {/* mock data */}
-    };
-  }
-}
-```
+2. Short Term
+   ```
+   - Add automated tests
+   - Add token validation tests
+   - Test user info endpoint
+   ```
 
-### 3. Test Utilities
+3. Long Term
+   ```
+   - Add security tests
+   - Add performance tests
+   - Add integration tests
+   ```
 
-```typescript
-// test/utils/test-helpers.ts
-export const generateTestToken = () => {
-  // Generate test JWT token
-};
+### Test Environment Notes
 
-export const setupTestDatabase = () => {
-  // Set up test DynamoDB instance
-};
-```
+1. Server Requirements
+   ```
+   - Node.js 20.x
+   - Available ports: 3001, 8081
+   - Network access to IB
+   ```
 
-## Test Scenarios
+2. Test Data Management
+   ```
+   - Use in-memory storage
+   - Reset between tests
+   - Mock IB responses when needed
+   ```
 
-### 1. Authorization Flow
-
-```typescript
-describe('Authorization Endpoint', () => {
-  test('successful authorization request', async () => {
-    // Test happy path
-  });
-  
-  test('invalid client credentials', async () => {
-    // Test error handling
-  });
-  
-  test('rate limiting', async () => {
-    // Test throttling
-  });
-});
-```
-
-### 2. Token Exchange
-
-```typescript
-describe('Token Endpoint', () => {
-  test('valid authorization code', async () => {
-    // Test code exchange
-  });
-  
-  test('expired authorization code', async () => {
-    // Test expiration handling
-  });
-  
-  test('refresh token flow', async () => {
-    // Test token refresh
-  });
-});
-```
-
-## Continuous Integration
-
-### GitHub Actions Workflow
-
-```yaml
-name: Test Suite
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install dependencies
-        run: npm install
-      - name: Run tests
-        run: npm test
-```
-
-## Test Reports
-
-### Coverage Reports
-- Generated after each test run
-- Published to CI/CD dashboard
-- Tracked over time
-
-### Performance Reports
-- Response time metrics
-- Error rates
-- Resource utilization
-
-## Test Maintenance
-
-### Regular Updates
-- Test case review
-- Mock data maintenance
-- Dependency updates
-
-### Documentation
-- Test scenario documentation
-- Setup instructions
-- Troubleshooting guides
-
-## Security Testing
-
-### Penetration Testing
-- Token security
-- Authentication bypass attempts
-- Input validation
-- Rate limiting effectiveness
-
-### Compliance Testing
-- OAuth 2.0 specification
-- Security best practices
-- Data protection requirements
-
-## Error Scenarios
-
-### Test Cases
-- Network failures
-- Service timeouts
-- Invalid tokens
-- Malformed requests
-- Rate limit exceeded
-- Database errors
-
-### Recovery Testing
-- Service resilience
-- Error reporting
-- Monitoring alerts
-- Cleanup procedures
-
-## Performance Benchmarks
-
-### Response Times
-- Authorization: < 200ms
-- Token exchange: < 300ms
-- UserInfo: < 150ms
-
-### Throughput
-- 100 requests/second minimum
-- 2000 concurrent users
-- < 1% error rate
-
-## Monitoring Integration
-
-### Test Metrics
-- Test execution time
-- Pass/fail rates
-- Coverage trends
-- Error patterns
-
-### Alerts
-- Test failure notifications
-- Coverage drops
-- Performance degradation
-- Security issues
+3. Known Issues
+   ```
+   - Server startup coordination
+   - Port conflicts
+   - Token persistence

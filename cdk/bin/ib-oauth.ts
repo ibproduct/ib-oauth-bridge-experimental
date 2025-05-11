@@ -6,7 +6,7 @@ import { IBOAuthStack } from '../lib/ib-oauth-stack';
 const app = new cdk.App();
 
 // Development stack
-new IBOAuthStack(app, 'IBOAuthDevStack', {
+new IBOAuthStack(app, 'ib-oauth-stack-dev', {
   env: {
     region: 'us-west-1'
   },
@@ -19,7 +19,7 @@ new IBOAuthStack(app, 'IBOAuthDevStack', {
 });
 
 // Production stack
-new IBOAuthStack(app, 'IBOAuthProdStack', {
+new IBOAuthStack(app, 'ib-oauth-stack-prod', {
   env: {
     region: 'us-west-1'
   },

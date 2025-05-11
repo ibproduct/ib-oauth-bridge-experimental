@@ -34,20 +34,25 @@ cp .env.example .env
 ### Local Development
 1. **Start Local Development**
    ```bash
-   # Start local development server
+   # Start development server
    npm run dev
+   
+   # In another terminal, start test client
+   cd tests
+   npx http-server -p 8081
    ```
-   - Uses serverless-offline for API Gateway/Lambda simulation
-   - Local DynamoDB for development
-   - Hot reloading enabled
+   - Express server on port 3001
+   - Test client on port 8081
+   - In-memory storage for development
+   - Hot reloading with ts-node
 
 2. **Testing Endpoints**
-   - Use Postman collection in `tests/postman`
-   - Environment variables in `tests/postman/environments`
-   - Local endpoints:
-     * http://localhost:3000/authorize
-     * http://localhost:3000/token
-     * http://localhost:3000/userinfo
+   - Use test client at http://localhost:8081
+   - Local OAuth server endpoints:
+     * http://localhost:3001/authorize
+     * http://localhost:3001/token
+   - Test IB API integration with proxy server
+   - Verify session handling and token exchange
 
 ### Testing
 
@@ -96,62 +101,79 @@ cp .env.example .env
      * Unit tests
      * Commit message format
 
-## Deployment Process
+## AWS Deployment Steps
 
-### Development Deployment
+### 1. Infrastructure Setup
 ```bash
-# Deploy to dev environment
-npm run deploy:dev
+# Deploy AWS infrastructure
+cdk deploy
+
+# Verify DynamoDB tables
+aws dynamodb list-tables
 ```
 
-### Production Deployment
+### 2. Production Configuration
+1. Configure AWS Lambda environment
+2. Set up CloudWatch logging
+3. Configure API Gateway endpoints
+4. Set up SSL certificate
+
+### 3. Deployment Process
 ```bash
-# Deploy to production
-npm run deploy:prod
+# Build and package Lambda functions
+npm run build
+
+# Deploy to AWS
+npm run deploy
 ```
 
-### Post-Deployment Verification
-1. Run health check script
+### 4. Post-Deployment Verification
+1. Test OAuth flow end-to-end
 2. Verify CloudWatch logs
-3. Check API endpoints
+3. Check API Gateway endpoints
 4. Run integration tests
 
-## Monitoring & Debugging
+## Current Monitoring & Debugging
 
-### Local Debugging
-1. Use VS Code launch configurations in `.vscode/launch.json`
-2. CloudWatch Logs insights locally via AWS Toolkit
-3. DynamoDB local explorer
+### Local Development
+1. Use VS Code debugger with ts-node
+2. Console logging for development
+3. Test client for flow verification
+4. Network tab for API inspection
 
-### Production Monitoring
-1. CloudWatch Dashboards
-   - Access via AWS Console
-   - Custom metrics and alarms
-   - Log insights queries
+### Initial Production Monitoring
+1. Application Logs
+   - Winston logger setup
+   - Error tracking
+   - Request/response logging
+   - Performance metrics
 
-2. X-Ray Tracing
-   - Trace request flows
-   - Identify bottlenecks
-   - Debug errors
+2. Server Monitoring
+   - PM2 monitoring
+   - Resource utilization
+   - Error rates
+   - Response times
 
 ## Troubleshooting
 
-### Common Issues
+### Common Issues & Solutions
 
-1. **DynamoDB Connectivity**
+1. **DynamoDB Issues**
    - Check AWS credentials
    - Verify table exists
    - Check IAM permissions
 
-2. **Lambda Execution**
+2. **Lambda Issues**
    - Check CloudWatch logs
    - Verify environment variables
-   - Check timeout settings
+   - Check execution role
+   - Monitor memory usage
 
-3. **API Gateway**
-   - Verify API key if required
-   - Check CORS settings
-   - Validate request/response mappings
+3. **API Gateway Issues**
+   - Check endpoint configuration
+   - Verify Lambda integration
+   - Check CloudWatch logs
+   - Test with API Gateway console
 
 ### Error Handling
 

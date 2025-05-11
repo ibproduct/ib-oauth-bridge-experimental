@@ -29,13 +29,32 @@ export const GrantType = {
   REFRESH_TOKEN: 'refresh_token'
 } as const;
 
-// Authorization request parameter validation schema
-export const AuthorizeParamsSchema = z.object({
+// Platform URL validation schema
+const PlatformUrlSchema = z.string()
+  .url()
+  .refine(url => {
+    try {
+      const hostname = new URL(url).hostname;
+      return hostname.endsWith('.intelligencebank.com');
+    } catch {
+      return false;
+    }
+  }, {
+    message: "Platform URL must be a valid IntelligenceBank domain"
+  });
+
+// Base authorization request parameter validation schema
+export const BaseAuthorizeParamsSchema = z.object({
   response_type: z.literal(ResponseType.CODE),
   client_id: z.string().min(1),
   redirect_uri: z.string().url(),
   scope: z.string().min(1),
   state: z.string().optional()
+});
+
+// Full authorization request parameter validation schema
+export const AuthorizeParamsSchema = BaseAuthorizeParamsSchema.extend({
+  platform_url: PlatformUrlSchema.optional()
 });
 
 // Token request parameter validation schema
@@ -79,7 +98,16 @@ export function createOAuthError(
  * @throws {z.ZodError} If validation fails
  */
 export function validateAuthorizeParams(params: Record<string, unknown>): z.infer<typeof AuthorizeParamsSchema> {
-  return AuthorizeParamsSchema.parse(params);
+  // First validate base parameters
+  const baseParams = BaseAuthorizeParamsSchema.parse(params);
+  
+  // If platform_url is present, validate it
+  if (params.platform_url) {
+    return AuthorizeParamsSchema.parse(params);
+  }
+
+  // Return base params if no platform_url
+  return baseParams;
 }
 
 /**

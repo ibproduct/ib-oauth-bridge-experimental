@@ -1,144 +1,68 @@
-# Current Task: OAuth 2.0 Bridge for IntelligenceBank
+# Current Task Status
 
-## Current Objectives
-1. ✅ Create OAuth 2.0 compatible bridge service for IntelligenceBank Browser Login API
-2. ✅ Document complete system architecture and implementation plan
-3. ✅ Set up project structure and documentation
+## Task: Implement OAuth Flow with Platform URL Form
 
-## Context
-IntelligenceBank provides a Browser Login API with a 3-step authentication flow:
-1. Get initial token
-2. Browser-based login
-3. Token exchange for session info
+### Current Progress
+1. ✅ Basic server setup
+   - Test client at http://localhost:8081
+   - OAuth server at http://localhost:3001
+   - Platform URL form implemented
 
-We need to map this to standard OAuth 2.0 flows for client compatibility.
+2. ✅ IB Browser Login Flow - Step 1 & 2
+   - Get initial token from /v1/auth/app/token
+   - Redirect to IB login with token
+   - Open in new tab
 
-## Completed Steps
-1. ✅ Analyzed IB Browser Login API workflow
-2. ✅ Designed AWS-based architecture
-3. ✅ Documented technical stack requirements
-4. ✅ Created development workflow guidelines
-5. ✅ Initial documentation structure
-6. ✅ Set up project infrastructure:
-   - Initialized Node.js project with TypeScript
-   - Configured CDK and Lambda TypeScript settings
-   - Created project directory structure
-   - Added .gitignore for build artifacts
-7. ✅ Implemented AWS infrastructure:
-   - DynamoDB tables with TTL and GSIs
-   - Lambda function shells
-   - API Gateway configuration
-   - IAM roles and permissions
-8. ✅ Created placeholder Lambda handlers:
-   - authorize endpoint
-   - token endpoint
-   - userinfo endpoint
+3. 🔄 IB Browser Login Flow - Step 3 (In Progress)
+   - Added polling of /v1/auth/app/info
+   - Implemented token storage
+   - Added OAuth token generation
 
-## Next Steps
+4. ❌ Token Service Implementation
+   - JWT token generation not started
+   - Token validation not started
+   - Refresh token handling not started
 
-### Phase 2: Core Implementation
-1. Implement Lambda Functions:
-   - [✅] Implement authorize handler:
-      * ✅ Validate OAuth parameters
-      * ✅ Generate state parameter
-      * ✅ Call IB API for initial token
-      * ✅ Store state mapping in DynamoDB
-      * ✅ Generate IB login URL
-   - [ ] Implement token handler:
-     * Validate token request
-     * Exchange code for tokens
-     * Store token mapping
-     * Generate JWT tokens
-   - [ ] Implement userinfo handler:
-     * Validate access token
-     * Retrieve user information
-     * Map IB profile to OAuth claims
+5. ❌ UserInfo Handler
+   - Not started
 
-2. Implement Shared Services:
-   - [✅] IB API Client:
-      * ✅ HTTP client setup
-      * ✅ Error handling
-      * ✅ Retry logic
-   - [ ] Token Service:
-     * JWT generation
-     * Token validation
-     * Refresh token handling
-   - [✅] Storage Service:
-      * ✅ DynamoDB operations
-      * ✅ State management
-      * ✅ Token persistence
+### Current Issues
+1. Server startup coordination
+   - Need proper startup sequence for both servers
+   - Port conflicts need resolution
 
-3. Error Handling:
-   - [ ] Implement OAuth error mapping
-   - [ ] Add error logging
-   - [ ] Create custom error types
+2. Token Polling
+   - Need to verify polling works after IB login
+   - Need to confirm token generation
 
-### Phase 3: Testing & Security
-1. Testing Implementation:
-   - [ ] Unit tests for all components
-   - [ ] Integration tests for API endpoints
-   - [ ] E2E test scenarios
-   - [ ] Load testing
+### Next Steps
+1. Test complete flow:
+   - Start both servers properly
+   - Test platform URL form
+   - Verify polling works
+   - Confirm token generation
 
-2. Security Measures:
-   - [ ] Implement token encryption
-   - [ ] Add request validation
-   - [ ] Set up rate limiting
-   - [ ] Configure CORS
+2. Implement remaining features:
+   - JWT token generation
+   - Token validation
+   - Refresh token handling
+   - UserInfo endpoint
 
-3. Error Handling:
-   - [ ] Add comprehensive error logging
-   - [ ] Implement retry mechanisms
-   - [ ] Set up error monitoring
+### Original Requirements Status
+- ✅ Platform URL form
+- ✅ IB Browser Login integration
+- 🔄 Token request parameters validation (Partial)
+- 🔄 Code for tokens exchange (In Progress)
+- 🔄 Token mapping storage (In Progress)
+- ❌ JWT token generation
+- ❌ Token Service implementation
+- ❌ Token validation
+- ❌ Refresh token handling
+- ❌ Userinfo handler
+- ❌ Error Handling
 
-### Phase 4: Documentation & Deployment
-1. Documentation:
-   - [ ] API documentation
-   - [ ] Integration guide
-   - [ ] Deployment procedures
-   - [ ] Troubleshooting guide
-
-2. Deployment:
-   - [ ] Create deployment pipeline
-   - [ ] Set up monitoring
-   - [ ] Configure alerts
-   - [ ] Create runbooks
-
-## Dependencies
-- AWS account with appropriate permissions
-- IntelligenceBank API credentials
-- Development environment setup
-- SSL certificates for domains
-
-## Risks & Mitigations
-1. Session Management
-   - Risk: IB session timeout misalignment
-   - Mitigation: Implement refresh token mechanism
-
-2. Error Handling
-   - Risk: Inconsistent error mapping
-   - Mitigation: Comprehensive error mapping layer
-
-3. Security
-   - Risk: Token exposure
-   - Mitigation: Encryption at rest and in transit
-
-## Success Criteria
-1. OAuth 2.0 compliance
-2. Successful end-to-end authentication flow
-3. Secure token management
-4. Comprehensive monitoring
-5. Complete documentation
-
-## Current Status
-Phase 1 (Infrastructure Setup) is complete. Moving to Phase 2 (Core Implementation) with focus on implementing the Lambda function handlers and shared services.
-
-## Next Actions
-1. Begin implementing the authorize handler:
-   - Set up IB API client service
-   - Implement OAuth parameter validation
-   - Create state management functions
-2. Create shared utilities:
-   - HTTP client wrapper
-   - OAuth parameter validators
-   - Error handling utilities
+### Technical Notes
+1. Using in-memory storage for development
+2. Simple token format for testing: `dev.{base64-encoded-json}`
+3. Need to implement proper JWT tokens later
+4. Need to add proper error handling

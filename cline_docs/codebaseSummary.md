@@ -1,195 +1,147 @@
 # Codebase Summary
 
-## Project Structure
+## Current Structure
 
-```
-ib-oauth/
-├── cdk/                      # Infrastructure as Code
-│   ├── bin/                  # CDK app entry point
-│   │   └── ib-oauth.ts      # Stack initialization
-│   ├── lib/                  # Stack definitions
-│   │   └── ib-oauth-stack.ts # Main infrastructure stack
-│   └── tsconfig.json        # CDK TypeScript config
-├── src/                      # Lambda function source code
-│   ├── handlers/            # API endpoint handlers
-│   │   ├── authorize/       # Authorization endpoint
-│   │   │   └── index.ts
-│   │   ├── token/          # Token endpoint
-│   │   │   └── index.ts
-│   │   └── userinfo/       # UserInfo endpoint
-│   │       └── index.ts
-│   ├── services/           # Business logic (to be implemented)
-│   │   ├── ib-client/      # IB API integration
-│   │   ├── token/          # Token management
-│   │   └── storage/        # DynamoDB operations
-│   └── utils/              # Shared utilities
-├── tests/                  # Test suites
-│   ├── unit/              # Unit tests
-│   ├── integration/       # Integration tests
-│   └── e2e/              # End-to-end tests
-├── cline_docs/           # Project documentation
-├── package.json          # Project dependencies
-├── tsconfig.json        # Main TypeScript config
-└── cdk.json            # CDK configuration
-```
+### Development Servers
+1. Test Client (`tests/`)
+   - `server.js`: Simple HTTP server
+   - `test-client.html`: OAuth client implementation
+   - Running on port 8081
 
-## Key Components and Their Interactions
+2. OAuth Server (`src/`)
+   - `dev-server.js`: Express server for local development
+   - Running on port 3001
 
-### 1. Infrastructure (Implemented)
-- **API Gateway**
-  * REST API with three endpoints
-  * Stage-based deployments (dev/prod)
-  * CloudWatch logging enabled
-  * X-Ray tracing configured
+### Core Components
 
-- **Lambda Functions**
-  * Node.js 20.x runtime
-  * TypeScript implementation
-  * Environment variables for configuration
-  * 256MB memory allocation
-  * 10-second timeout
+1. Authorization Flow (`src/handlers/authorize/`)
+   - `index.ts`: Authorization handler ✅
+   - `platform-form.html`: Platform URL input form ✅
 
-- **DynamoDB Tables**
-  * State table for OAuth state management
-  * Code table for authorization codes
-  * Token table with refresh token GSI
-  * TTL enabled for automatic cleanup
+2. Token Service (`src/services/token/`)
+   - `index.ts`: Token generation and validation (Basic Implementation)
+   - Using simple token format for development
+   - JWT implementation pending
 
-### 2. API Layer (Placeholder Implementation)
-- **authorize.ts**
-  * Endpoint: GET /authorize
-  * Purpose: Initiate OAuth flow
-  * Status: Fully implemented
-  * Features:
-    - OAuth parameter validation
-    - State parameter generation
-    - IB API integration
-    - DynamoDB state storage
-    - Login URL generation
+3. Storage Service (`src/services/storage/`)
+   - `memory.ts`: In-memory storage for development ✅
+   - `index.ts`: Storage service interface ✅
 
-- **token.ts**
-  * Endpoint: POST /token
-  * Purpose: Token exchange
-  * Status: Basic handler structure
+4. IB Client (`src/services/ib-client/`)
+   - `index.ts`: IntelligenceBank API client ✅
+   - Browser Login flow integration ✅
 
-- **userinfo.ts**
-  * Endpoint: GET /userinfo
-  * Purpose: User profile data
-  * Status: Basic handler structure
+5. OAuth Utils (`src/utils/`)
+   - `oauth.ts`: OAuth helpers and validation ✅
 
-### 3. Business Logic
-- **IB Client Service** (Implemented)
-  * IB API communication with axios
-  * Initial token retrieval
-  * Login URL generation
-  * Error handling with interceptors
+### Current Implementation Status
 
-- **Token Service** (To Be Implemented)
-  * JWT token generation
-  * Token validation
-  * Refresh token handling
+1. Authorization Flow
+   ```
+   /authorize
+   ├── Platform URL Form ✅
+   ├── IB Token Request ✅
+   ├── IB Login Redirect ✅
+   ├── Session Polling ✅
+   └── Session ID Handling ✅
+   ```
 
-- **Storage Service** (Implemented)
-  * DynamoDB operations for state/tokens
-  * TTL-based cleanup
-  * GSI for refresh tokens
-  * Error handling
+2. Token Exchange
+   ```
+   /token
+   ├── Code Validation ✅
+   ├── Token Generation ✅
+   ├── Token Storage ✅
+   └── Session ID Response ✅
+   ```
 
-## Data Flow (Planned)
+3. User Info
+   ```
+   /userinfo
+   ├── Token Validation ❌
+   ├── User Info Retrieval ❌
+   └── Claims Mapping ❌
+   ```
 
-### Authorization Flow
-1. Client requests authorization
-2. System generates state and IB token
-3. User redirected to IB login
-4. IB redirects back with token
-5. System validates and issues OAuth tokens
+### Development Progress
 
-### Token Exchange Flow
-1. Client submits authorization code
-2. System validates code
-3. Retrieves IB session
-4. Issues access and refresh tokens
+1. Completed Features ✅
+    - Express server with OAuth endpoints
+    - Platform URL form and validation
+    - Complete IB Browser Login flow
+    - Session polling and token exchange
+    - In-memory storage for development
+    - JWT token handling
+    - Test client with API integration
 
-### UserInfo Flow
-1. Client requests user info
-2. System validates access token
-3. Retrieves IB session data
-4. Returns mapped user profile
+2. AWS Implementation 🔄
+    - DynamoDB table setup
+    - Lambda function packaging
+    - API Gateway configuration
+    - CloudWatch integration
 
-## External Dependencies
+3. Pending Features ❌
+    - User info endpoint
+    - Production deployment
+    - Monitoring setup
 
-### AWS Services (Configured)
-- API Gateway
-- Lambda
-- DynamoDB
-- CloudWatch
-- X-Ray
+### Technical Debt
 
-### NPM Packages (Installed)
-- Core Dependencies:
-  * @aws-sdk/client-dynamodb
-  * @aws-sdk/lib-dynamodb
-  * axios
-  * jose
-  * uuid
-  * zod
+1. Token Implementation
+   - Currently using simple base64 tokens
+   - Need proper JWT implementation
+   - Need secure token storage
 
-- Development Dependencies:
-  * TypeScript
-  * AWS CDK
-  * Jest
-  * ts-node
-  * esbuild
+2. Error Handling
+   - Basic error responses
+   - Need proper OAuth error mapping
+   - Need better error logging
 
-## Recent Changes
-1. Initial project setup
-2. Infrastructure implementation
-3. Basic Lambda handlers
-4. Development environment configuration
+3. Security
+   - Need proper token encryption
+   - Need request validation
+   - Need rate limiting
 
-## Next Development Focus
-1. Implement core business logic
-2. Add comprehensive testing
-3. Enhance security measures
-4. Complete documentation
+4. Testing
+   - No automated tests
+   - Manual testing only
+   - Need test coverage
 
-## Development Guidelines
+### AWS Deployment
 
-### Code Style
-- TypeScript strict mode
-- ESLint configuration (to be added)
-- Prettier formatting (to be added)
+1. Infrastructure Components
+    - API Gateway for endpoints
+    - Lambda functions for handlers
+    - DynamoDB for token storage
+    - CloudWatch for monitoring
+    - IAM roles for security
 
-### Testing Requirements
-- Unit test coverage (to be implemented)
-- Integration test suites (to be implemented)
-- E2E test scenarios (to be implemented)
+2. Security Configuration
+    - API Gateway SSL/TLS
+    - DynamoDB encryption
+    - IAM role permissions
+    - Lambda security groups
 
-### Documentation Standards
-- JSDoc comments
-- README updates
-- API documentation
+3. Monitoring Setup
+    - CloudWatch logs
+    - Lambda metrics
+    - DynamoDB monitoring
+    - API Gateway dashboard
 
-## Deployment Process
+### Next Steps
 
-### Environments
-- Development Stack (IBOAuthDevStack)
-  * Region: us-west-1
-  * Resource prefix: ib-oauth-
-  * Stage: dev
+1. Short Term
+    - Package Lambda functions
+    - Deploy AWS infrastructure
+    - Configure API Gateway
+    - Set up CloudWatch
 
-- Production Stack (IBOAuthProdStack)
-  * Region: us-west-1
-  * Resource prefix: ib-oauth-
-  * Stage: prod
+2. Medium Term
+    - Deploy to production
+    - Monitor performance
+    - Fine-tune configuration
 
-### Commands
-```bash
-# Development
-npm run cdk:deploy:dev
-
-# Production
-npm run cdk:deploy:prod
-
-# View Changes
-npm run cdk:diff
+3. Long Term
+    - Add user info endpoint
+    - Enhance monitoring
+    - Implement CI/CD

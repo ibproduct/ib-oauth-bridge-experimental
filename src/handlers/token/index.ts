@@ -1,14 +1,13 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { ZodError } from 'zod';
-import { 
-  validateTokenParams, 
-  createOAuthError, 
-  OAuthErrorType, 
-  GrantType 
+import {
+  validateTokenParams,
+  createOAuthError,
+  OAuthErrorType,
+  GrantType
 } from '../../utils/oauth';
 import { TokenService } from '../../services/token';
 import { storageService } from '../../services/storage';
-import { ibClient } from '../../services/ib-client';
 
 const tokenService = new TokenService();
 
@@ -80,42 +79,63 @@ async function handleAuthorizationCode(
       ));
     }
 
-    // Get IB session info using stored token
-    const sessionInfo = await ibClient.getSessionInfo(stateEntry.ibToken);
-
-    // Generate OAuth tokens
+    // Generate OAuth tokens using stored info
     const tokens = await tokenService.generateTokens({
-      sub: sessionInfo.session.user.id,
-      name: `${sessionInfo.session.user.firstName} ${sessionInfo.session.user.lastName}`,
-      email: sessionInfo.session.user.email,
+      sub: stateEntry.ibToken.sid,
       scope: stateEntry.scope
     });
 
     // Store token mapping
+    // Store token with the same IB token for session info
     await storageService.storeToken(
       tokens.access_token,
       tokens.refresh_token,
       clientId,
       stateEntry.scope,
-      sessionInfo.session.id
+      stateEntry.ibToken,
+      stateEntry.platformUrl
     );
 
     // Delete used state entry
     await storageService.deleteState(code);
+
+    // Get API info from stored token
+    const apiInfo = stateEntry.ibToken.content as { apiV3url: string, clientid: string };
 
     return {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(tokens)
+      body: JSON.stringify({
+        ...tokens,
+        platform_url: apiInfo.apiV3url,
+        client_id: apiInfo.clientid,
+        sid: stateEntry.ibToken.sid
+      })
     };
   } catch (error) {
-    if (error instanceof Error && error.message.includes('state')) {
-      return errorResponse(createOAuthError(
-        OAuthErrorType.INVALID_REQUEST,
-        'Invalid or expired authorization code'
-      ));
+    if (error instanceof Error) {
+      if (error.message.includes('state')) {
+        return errorResponse(createOAuthError(
+          OAuthErrorType.INVALID_REQUEST,
+          'Invalid or expired authorization code'
+        ));
+      }
+      if (error.message === 'Authentication pending' || error.message === 'Authentication timeout') {
+        return {
+          statusCode: 404,
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            error: error.message === 'Authentication timeout' ? 'authorization_timeout' : 'authorization_pending',
+            error_description: error.message === 'Authentication timeout'
+              ? 'The authorization request has timed out'
+              : 'The authorization request is still pending'
+          })
+        };
+      }
     }
     throw error;
   }
@@ -140,35 +160,40 @@ async function handleRefreshToken(
       ));
     }
 
-    // Get current IB session info
-    const sessionInfo = await ibClient.getSessionInfo(tokenEntry.ibSid);
-
-    // Generate new tokens
+    // Generate new tokens using stored info
     const tokens = await tokenService.generateTokens({
-      sub: sessionInfo.session.user.id,
-      name: `${sessionInfo.session.user.firstName} ${sessionInfo.session.user.lastName}`,
-      email: sessionInfo.session.user.email,
+      sub: tokenEntry.ibToken.sid,
       scope: tokenEntry.scope
     });
 
     // Store new token mapping
+    // Store token with the same IB token for session info
     await storageService.storeToken(
       tokens.access_token,
       tokens.refresh_token,
       clientId,
       tokenEntry.scope,
-      sessionInfo.session.id
+      tokenEntry.ibToken,
+      tokenEntry.platformUrl
     );
 
     // Delete old token entry
     await storageService.deleteToken(tokenEntry.accessToken);
+
+    // Get API info from stored token
+    const apiInfo = tokenEntry.ibToken.content as { apiV3url: string, clientid: string };
 
     return {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(tokens)
+      body: JSON.stringify({
+        ...tokens,
+        platform_url: apiInfo.apiV3url,
+        client_id: apiInfo.clientid,
+        sid: tokenEntry.ibToken.sid
+      })
     };
   } catch (error) {
     if (error instanceof Error && error.message.includes('refresh token')) {

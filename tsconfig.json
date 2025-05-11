@@ -23,5 +23,5 @@
     "resolveJsonModule": true
   },
   "exclude": ["node_modules", "cdk.out", "dist", "cdk"],
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "scripts/**/*"]
 }

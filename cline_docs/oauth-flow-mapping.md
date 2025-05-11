@@ -1,258 +1,125 @@
-# OAuth 2.0 Flow Mapping
+# OAuth Flow Mapping
 
-## Overview
-This document explains how the IntelligenceBank Browser Login API flow is mapped to a standard OAuth 2.0 Authorization Code flow.
+## Current Implementation
 
-## Flow Comparison
+### 1. Authorization Flow
+```
+GET /authorize
+  ├── No platform_url → Show platform URL form
+  └── With platform_url → Start IB Browser Login
+      ├── Step 1: GET /v1/auth/app/token - Get initial token ✅
+      ├── Step 2: Redirect to /auth/?login=0&token={content} ✅
+      └── Step 3: GET /v1/auth/app/info?token={content} - Poll session status ✅
+```
 
-### Standard OAuth 2.0 Flow
-1. Client requests authorization
-2. User authenticates and authorizes
-3. Authorization code returned
-4. Client exchanges code for tokens
-5. Access token used for API access
+### 2. Token Exchange
+```
+POST /token
+  ├── Validate code & state
+  ├── Validate code & state ✅
+  ├── Return stored session info ✅
+  └── Generate OAuth tokens
+      ├── Access token: dev.{base64(user-info)} ✅
+      └── Refresh token: UUID v4 ✅
+```
 
-### IB Browser Login Flow
-1. Get initial token
-2. Redirect to browser login
-3. Exchange token for session info
+### 3. Token Service (Not Started ❌)
+```
+- JWT token generation
+- Token validation
+- Refresh token handling
+```
 
-## Implementation Details
+### 4. UserInfo Endpoint (Not Started ❌)
+```
+GET /userinfo
+  ├── Validate access token
+  ├── Extract user info
+  └── Return OAuth claims
+```
 
-### 1. Authorization Endpoint (/authorize)
-```typescript
-async function handleAuthorize(req: AuthorizeRequest): Promise<AuthorizeResponse> {
-  // 1. Validate OAuth parameters
-  validateOAuthParams(req.client_id, req.redirect_uri, req.scope);
+## Flow Details
 
-  // 2. Generate OAuth state if not provided
-  const state = req.state || generateState();
+### Authorization Flow
+1. Client requests `/authorize` ✅
+   ```
+   GET /authorize?
+     response_type=code
+     &client_id=test-client
+     &redirect_uri=http://localhost:8081/callback
+     &scope=profile
+     &state=random
+   ```
 
-  // 3. Call IB Step 1 to get token
-  const ibResponse = await ibClient.getToken();
-  const { SID, content: ibToken } = ibResponse;
+2. Server shows platform URL form if needed ✅
+   ```html
+   <form>
+     <input type="url" name="platform_url" required>
+     <!-- Hidden OAuth params -->
+   </form>
+   ```
 
-  // 4. Store mapping in DynamoDB
-  await storeAuthState({
-    state,
-    ibToken,
-    sid: SID,
-    clientId: req.client_id,
-    redirectUri: req.redirect_uri,
-    scope: req.scope,
-    codeChallenge: req.code_challenge,
-    codeChallengeMethod: req.code_challenge_method
-  });
+3. Server starts IB Browser Login ✅
+   - GET /v1/auth/app/token to get initial token
+   - Store token and platform URL
+   - Redirect to /auth/?login=0&token={content}
 
-  // 5. Construct IB login URL
-  const loginUrl = constructIBLoginUrl(ibToken);
+4. After IB login ✅
+   - Poll GET /v1/auth/app/info?token={content}
+   - When session is ready, generate authorization code
+   - Redirect to client callback with code and original state
 
-  // 6. Redirect to IB login
-  return {
-    redirectUrl: loginUrl,
-    state
-  };
+### Token Exchange
+1. Client requests tokens 🔄
+   ```
+   POST /token
+   {
+     grant_type: "authorization_code",
+     code: "auth_code",
+     redirect_uri: "callback_url",
+     client_id: "client_id"
+   }
+   ```
+
+2. Server validates and exchanges code ✅
+   - Validate request parameters
+   - Check authorization code
+   - Generate JWT tokens
+   - Return token response
+
+### Token Response
+```json
+{
+  "access_token": "dev.{base64-encoded-jwt}",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "uuid-v4",
+  "platform_url": "https://company.intelligencebank.com",
+  "client_id": "client-id",
+  "sid": "session-id"  // Important: This is the IB session ID needed for API calls
 }
 ```
 
-### 2. IB Login Callback Handler (/callback)
-```typescript
-async function handleCallback(req: CallbackRequest): Promise<CallbackResponse> {
-  // 1. Extract IB token from callback
-  const { token: ibToken } = req.query;
+### Session ID Handling
+- The `sid` from successful IB login response is used for API calls
+- Must be passed in lowercase `sid` header when making IB API calls
+- Different from the initial SID received in Step 1 of Browser Login
 
-  // 2. Retrieve stored state from DynamoDB
-  const authState = await getAuthState(ibToken);
-
-  // 3. Call IB Step 3 to get session info
-  const sessionInfo = await ibClient.getSessionInfo(ibToken);
-
-  // 4. Generate OAuth authorization code
-  const code = generateAuthCode();
-
-  // 5. Store code mapping in DynamoDB
-  await storeAuthCode({
-    code,
-    ibToken,
-    sessionInfo,
-    clientId: authState.clientId,
-    scope: authState.scope
-  });
-
-  // 6. Redirect to client with code
-  return redirectToClient(authState.redirectUri, {
-    code,
-    state: authState.state
-  });
-}
-```
-
-### 3. Token Endpoint (/token)
-```typescript
-async function handleToken(req: TokenRequest): Promise<TokenResponse> {
-  // 1. Validate OAuth parameters
-  validateTokenRequest(req);
-
-  // 2. Retrieve stored code data
-  const codeData = await getAuthCode(req.code);
-
-  // 3. Validate client credentials
-  validateClient(req.client_id, req.client_secret);
-
-  // 4. Generate OAuth tokens
-  const accessToken = generateAccessToken({
-    sub: codeData.sessionInfo.session.userUuid,
-    scope: codeData.scope
-  });
-
-  const refreshToken = generateRefreshToken();
-
-  // 5. Store token mapping in DynamoDB
-  await storeTokens({
-    accessToken,
-    refreshToken,
-    ibToken: codeData.ibToken,
-    sessionInfo: codeData.sessionInfo
-  });
-
-  // 6. Return OAuth tokens
-  return {
-    access_token: accessToken,
-    refresh_token: refreshToken,
-    token_type: 'Bearer',
-    expires_in: 3600
-  };
-}
-```
-
-## State Management
-
-### DynamoDB Schema
-
-#### Auth State Table
-```typescript
-interface AuthState {
-  state: string;          // OAuth state parameter
-  ibToken: string;        // IB token from Step 1
-  sid: string;           // IB session ID
-  clientId: string;      // OAuth client ID
-  redirectUri: string;   // OAuth redirect URI
-  scope: string;         // OAuth requested scope
-  codeChallenge?: string; // PKCE code challenge
-  expires: number;       // TTL for cleanup
-}
-```
-
-#### Auth Code Table
-```typescript
-interface AuthCode {
-  code: string;          // OAuth authorization code
-  ibToken: string;       // IB token
-  sessionInfo: object;   // IB session information
-  clientId: string;      // OAuth client ID
-  scope: string;         // OAuth scope
-  expires: number;       // TTL for cleanup
-}
-```
-
-#### Token Table
-```typescript
-interface TokenMapping {
-  accessToken: string;   // OAuth access token
-  refreshToken: string;  // OAuth refresh token
-  ibToken: string;       // IB token
-  sessionInfo: object;   // IB session information
-  expires: number;       // TTL for cleanup
-}
-```
-
-## Session Management
-
-### Token Refresh Flow
-```typescript
-async function handleRefresh(req: RefreshRequest): Promise<TokenResponse> {
-  // 1. Validate refresh token
-  const tokenMapping = await getTokenMapping(req.refresh_token);
-
-  // 2. Check IB session validity
-  const sessionValid = await validateIBSession(tokenMapping.ibToken);
-
-  if (!sessionValid) {
-    // 3a. If IB session expired, require new login
-    throw new OAuthError('invalid_grant');
-  }
-
-  // 3b. Generate new OAuth tokens
-  const newAccessToken = generateAccessToken({
-    sub: tokenMapping.sessionInfo.session.userUuid,
-    scope: tokenMapping.scope
-  });
-
-  const newRefreshToken = generateRefreshToken();
-
-  // 4. Update token mapping
-  await updateTokenMapping({
-    oldRefreshToken: req.refresh_token,
-    newAccessToken,
-    newRefreshToken
-  });
-
-  // 5. Return new tokens
-  return {
-    access_token: newAccessToken,
-    refresh_token: newRefreshToken,
-    token_type: 'Bearer',
-    expires_in: 3600
-  };
-}
-```
-
-## Error Handling
-
-### OAuth Error Mapping
-```typescript
-const IB_TO_OAUTH_ERRORS = {
-  'token_expired': 'invalid_grant',
-  'invalid_token': 'invalid_grant',
-  'session_expired': 'invalid_grant',
-  'unauthorized': 'unauthorized_client',
-  'rate_limited': 'temporarily_unavailable'
-};
-
-function mapIBErrorToOAuth(ibError: IBError): OAuthError {
-  const oauthCode = IB_TO_OAUTH_ERRORS[ibError.code] || 'server_error';
-  return new OAuthError(oauthCode);
-}
-```
+## Next Steps
+1. ✅ Complete polling implementation
+2. ✅ Add basic token generation
+3. ✅ Add refresh token handling
+4. 🔄 Implement proper JWT token validation
+5. ❌ Build userinfo endpoint
+6. 🔄 Add proper error handling
+7. ❌ Deploy to production server
+8. ❌ Implement database storage
 
 ## Security Considerations
-
-### Token Security
-1. All tokens (IB and OAuth) are encrypted at rest
-2. Access tokens have short lifetimes (1 hour)
-3. Refresh tokens are single-use
-4. PKCE support for public clients
-
-### Session Validation
-1. Regular IB session checks
-2. Automatic token revocation on session expiry
-3. Concurrent session handling
-
-### Rate Limiting
-1. Per-client limits
-2. Global API limits
-3. Automatic throttling
-
-## Monitoring
-
-### Key Metrics
-1. Token conversion success rate
-2. Session validity duration
-3. Refresh token usage
-4. Error rates by type
-
-### Alerts
-1. High token failure rate
-2. Session validation issues
-3. Database operation errors
-4. Rate limit breaches
+1. 🔄 Need proper token encryption
+2. ❌ Need secure database storage
+3. 🔄 Need proper error handling
+4. ❌ Need rate limiting
+5. ✅ Basic request validation implemented
+6. ❌ Need proper CORS configuration
+7. ❌ Need SSL/TLS configuration
