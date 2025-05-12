@@ -34,8 +34,11 @@ export class IBClient {
    * Initialize client with platform URL
    */
   private initializeClient(platformUrl: string): void {
+    // Remove https:// from platform URL for proxy
+    const cleanPlatformUrl = platformUrl.replace(/^https?:\/\//, '');
+    
     this.client = axios.create({
-      baseURL: platformUrl,
+      baseURL: `https://${cleanPlatformUrl}`,
       headers: {
         'Content-Type': 'application/json'
       }
@@ -65,7 +68,8 @@ export class IBClient {
     this.initializeClient(platformUrl);
     try {
       if (!this.client) throw new Error('Client not initialized');
-      const response = await this.client.post('/v1/auth/app/token');
+      const response = await this.client.post(`/v1/auth/app/token`);
+      console.log('Initial token response:', response.data);
       return response.data;
     } catch (error) {
       throw new Error('Failed to get initial token from IntelligenceBank');
@@ -102,18 +106,10 @@ export class IBClient {
    */
   generateLoginUrl(
     platformUrl: string,
-    token: string,
-    redirectUri: string,
-    state: string
+    token: string
   ): string {
-    const params = new URLSearchParams({
-      login: '0',
-      token,
-      redirect_uri: redirectUri,
-      state
-    });
-    
-    return `${platformUrl}/auth/?${params.toString()}`;
+    // For login URL, we use the original platform URL since this is opened in the browser
+    return `${platformUrl}/auth/?login=0&token=${token}`;
   }
 
   /**

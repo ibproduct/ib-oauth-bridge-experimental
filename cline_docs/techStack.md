@@ -32,6 +32,12 @@
   * TTL for automatic cleanup
   * On-demand capacity
 
+- **CloudFront/S3**
+  * Names: `ib-oauth-client-{stage}`
+  * Static website hosting
+  * CloudFront distribution
+  * S3 origin access identity
+
 ### Security & Authentication
 - **JWT Handling**
   * jose library for JWT operations
@@ -140,13 +146,13 @@ REFRESH_TOKEN_EXPIRY=2592000
 ### Development Environment
 - Region: us-west-1
 - Stage: dev
-- Stack name: IBOAuthDevStack
+- Stack name: ib-oauth-stack-dev
 - Domain: oauth-dev.yourdomain.com
 
 ### Production Environment
 - Region: us-west-1
 - Stage: prod
-- Stack name: IBOAuthProdStack
+- Stack name: ib-oauth-stack-prod
 - Domain: oauth.yourdomain.com
 
 ## Scaling & Performance

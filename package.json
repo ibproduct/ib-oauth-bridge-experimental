@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "build": "tsc && node scripts/copy-assets.js",
-    "build:cdk": "tsc -p cdk/tsconfig.json",
+    "build:lambdas": "node scripts/build-lambdas.js",
+    "build:cdk": "npm run build:lambdas && tsc -p cdk/tsconfig.json",
     "test": "jest",
     "cdk": "cdk",
     "cdk:synth": "cdk synth",

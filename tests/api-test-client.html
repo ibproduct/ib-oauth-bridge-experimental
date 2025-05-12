@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OAuth API Test Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 4px;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            border: 1px solid #dee2e6;
+        }
+        .error {
+            color: #dc3545;
+        }
+        .success {
+            color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <h1>OAuth API Test Client</h1>
+    
+    <div>
+        <h2>Step 1: Start OAuth Flow</h2>
+        <a href="#" class="button" onclick="startOAuth()">Login with IntelligenceBank</a>
+    </div>
+
+    <div>
+        <h2>Step 2: Handle Callback</h2>
+        <div id="callback-result" class="result">Waiting for callback...</div>
+    </div>
+
+    <div>
+        <h2>Step 3: Test IB API Call</h2>
+        <a href="#" class="button" onclick="testIBApi()" id="test-api-button" style="display: none;">Test IB API</a>
+        <div id="test-api-result" class="result"></div>
+    </div>
+
+    <script>
+        // Debug logging helper
+        function logDebug(action, data) {
+            console.log(`[OAuth Debug] ${action}:`, data);
+        }
+
+        // OAuth configuration
+        // Get the current domain from CloudFront
+        const currentDomain = window.location.hostname;
+        
+        // Get API Gateway URL from environment
+        const apiGatewayUrl = window.location.hostname.includes('localhost')
+            ? 'http://localhost:3001'
+            : 'https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev';
+        
+        const config = {
+            clientId: 'test-client',
+            redirectUri: `https://${currentDomain}/callback`,
+            authEndpoint: `${apiGatewayUrl}/authorize`,
+            tokenEndpoint: `${apiGatewayUrl}/token`
+        };
+
+        logDebug('Configuration', config);
+
+        // Store API info from successful auth
+        let apiV3url = '';
+        let clientId = '';
+        let sid = '';
+
+        // Start OAuth flow
+        function startOAuth() {
+            const params = new URLSearchParams({
+                response_type: 'code',
+                client_id: config.clientId,
+                redirect_uri: config.redirectUri,
+                scope: 'profile',
+                state: generateState()
+            });
+
+            // Store state for validation
+            sessionStorage.setItem('oauth_state', params.get('state'));
+
+            // Open authorization in new tab
+            window.open(`${config.authEndpoint}?${params.toString()}`, '_blank');
+        }
+
+        // Generate random state parameter
+        function generateState() {
+            return Math.random().toString(36).substring(2, 15);
+        }
+
+        // Handle OAuth callback
+        async function handleCallback() {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
+            const state = params.get('state');
+            
+            if (!code) return;
+
+            // Validate state
+            const savedState = sessionStorage.getItem('oauth_state');
+            if (state !== savedState) {
+                showCallbackResult('Error: Invalid state parameter', true);
+                return;
+            }
+
+            try {
+                logDebug('Exchanging code for tokens', { code, state });
+                // Exchange code for tokens
+                const response = await fetch(config.tokenEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        grant_type: 'authorization_code',
+                        code: code,
+                        redirect_uri: config.redirectUri,
+                        client_id: config.clientId
+                    })
+                });
+
+                if (response.status === 404) {
+                    // Authentication pending, poll again
+                    setTimeout(handleCallback, 5000);
+                    showCallbackResult('Authentication pending...');
+                    return;
+                }
+
+                const data = await response.json();
+                logDebug('Token response', { status: response.status, data });
+                
+                if (response.ok) {
+                    // Store tokens and API info
+                    sessionStorage.setItem('access_token', data.access_token);
+                    sessionStorage.setItem('refresh_token', data.refresh_token);
+                    apiV3url = data.platform_url;
+                    clientId = data.client_id;
+                    sid = data.sid;
+                    
+                    console.log('Stored values:', {
+                        apiV3url,
+                        clientId,
+                        sid,
+                        fullData: data
+                    });
+                    
+                    showCallbackResult('Successfully received tokens:\n' + JSON.stringify(data, null, 2), false);
+                    document.getElementById('test-api-button').style.display = 'inline-block';
+                } else {
+                    showCallbackResult('Error:\n' + JSON.stringify(data, null, 2), true);
+                }
+            } catch (error) {
+                showCallbackResult('Error: ' + error.message, true);
+            }
+        }
+
+        // Test IB API call
+        async function testIBApi() {
+            const accessToken = sessionStorage.getItem('access_token');
+            if (!accessToken || !apiV3url || !clientId || !sid) {
+                showTestApiResult('Error: Missing access token, API info, or SID', true);
+                return;
+            }
+
+            try {
+                logDebug('Testing IB API', { apiV3url, clientId, sid });
+                // Remove https:// and construct the URL parts
+                const domain = apiV3url.replace('https://', '');
+                const endpoint = `api/3.0.0/${clientId}/filter.limit(100).order(createTime:-1)`;
+                const params = 'verbose=null&productkey=5A4E1D1A432440B3AA2B381D946DB64B';
+                
+                // Combine parts - add https:// back
+                const proxyUrl = `https://intelligencebank-proxy.herokuapp.com/https://${domain}/${endpoint}?${params}`;
+
+                const response = await fetch(proxyUrl, {
+                    method: 'GET',
+                    headers: {
+                        'sid': sid
+                    }
+                });
+
+                console.log('Making API call:', {
+                    url: proxyUrl,
+                    headers: {
+                        'sid': sid
+                    }
+                });
+
+                const data = await response.json();
+                logDebug('API response', data);
+                showTestApiResult(JSON.stringify(data, null, 2), false);
+            } catch (error) {
+                logDebug('API error', { error: error.message, stack: error.stack });
+                showTestApiResult('Error: ' + error.message, true);
+            }
+        }
+
+        function showCallbackResult(text, isError = false) {
+            const element = document.getElementById('callback-result');
+            element.textContent = text;
+            element.className = 'result ' + (isError ? 'error' : 'success');
+        }
+
+        function showTestApiResult(text, isError = false) {
+            const element = document.getElementById('test-api-result');
+            element.textContent = text;
+            element.className = 'result ' + (isError ? 'error' : 'success');
+        }
+
+        // Check for callback
+        if (window.location.search.includes('code=')) {
+            handleCallback();
+        }
+    </script>
+</body>
+</html>

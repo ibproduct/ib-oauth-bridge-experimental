@@ -103,7 +103,16 @@ cp .env.example .env
 
 ## AWS Deployment Steps
 
-### 1. Infrastructure Setup
+### 1. Test Client Deployment
+```bash
+# Build and deploy test client
+npm run build:cdk && AWS_REGION=us-west-1 STAGE=dev cdk deploy ib-oauth-stack-dev --require-approval never
+
+# Verify CloudFront distribution
+aws cloudfront list-distributions --query 'DistributionList.Items[?Comment==`ib-oauth-client-dev`]'
+```
+
+### 2. Infrastructure Setup
 ```bash
 # Deploy AWS infrastructure
 cdk deploy
@@ -128,18 +137,20 @@ npm run deploy
 ```
 
 ### 4. Post-Deployment Verification
-1. Test OAuth flow end-to-end
-2. Verify CloudWatch logs
+1. Test OAuth flow using CloudFront-hosted test client
+2. Verify CloudWatch logs for all components
 3. Check API Gateway endpoints
-4. Run integration tests
+4. Verify CloudFront distribution and S3 bucket
+5. Run integration tests
 
 ## Current Monitoring & Debugging
 
 ### Local Development
 1. Use VS Code debugger with ts-node
 2. Console logging for development
-3. Test client for flow verification
-4. Network tab for API inspection
+3. Local test client for development
+4. CloudFront-hosted test client for integration testing
+5. Network tab for API inspection
 
 ### Initial Production Monitoring
 1. Application Logs

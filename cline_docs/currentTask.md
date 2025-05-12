@@ -1,68 +1,64 @@
-# Current Task Status
+# Current Task: Debug Form Submission in Dev Environment
 
-## Task: Implement OAuth Flow with Platform URL Form
+## Testing Environment
+- Local development server: Working perfectly on port 3001
+- Dev environment: Deployed to AWS with test API client
+- Test API client: Hosted on CloudFront for integration testing
 
-### Current Progress
-1. ✅ Basic server setup
-   - Test client at http://localhost:8081
-   - OAuth server at http://localhost:3001
-   - Platform URL form implemented
+## Context
+The OAuth server is working perfectly in local development, and we're now testing the dev environment deployment with a hosted test API client. The form submission issue only appears in the dev environment, not locally.
 
-2. ✅ IB Browser Login Flow - Step 1 & 2
-   - Get initial token from /v1/auth/app/token
-   - Redirect to IB login with token
-   - Open in new tab
+## Current Status
+- ✅ Local development server (port 3001): Fully functional
+- ✅ Dev environment infrastructure deployed
+- ✅ Test API client hosted on CloudFront
+- ❌ Form submission not working in dev environment
 
-3. 🔄 IB Browser Login Flow - Step 3 (In Progress)
-   - Added polling of /v1/auth/app/info
-   - Implemented token storage
-   - Added OAuth token generation
+## Active Issues
+1. Form Submission Problem
+   - URL clears after submission
+   - JavaScript error on line 278
+   - Form data not reaching Lambda
+   - CORS configuration being refined
 
-4. ❌ Token Service Implementation
-   - JWT token generation not started
-   - Token validation not started
-   - Refresh token handling not started
+2. Environment Differences
+   - Local: Direct Express server access on port 3001
+   - Dev: CloudFront → API Gateway → Lambda
+   - Test Client: Hosted on CloudFront for consistent testing
 
-5. ❌ UserInfo Handler
-   - Not started
+## Today's Progress
+1. Infrastructure Updates
+   - Moved CORS handling to Lambda functions
+   - Simplified API Gateway to proxy mode
+   - Added detailed error logging
+   - Updated test client configuration
 
-### Current Issues
-1. Server startup coordination
-   - Need proper startup sequence for both servers
-   - Port conflicts need resolution
+2. Documentation Updates
+   - Created debug-progress.md for tracking
+   - Updated monitoring.md with debug focus
+   - Refreshed codebaseSummary.md
 
-2. Token Polling
-   - Need to verify polling works after IB login
-   - Need to confirm token generation
+## Immediate Tasks
+1. [ ] Debug JavaScript error on line 278
+2. [ ] Add detailed Lambda event logging
+3. [ ] Verify CORS headers in production
+4. [ ] Test form submission data flow
 
-### Next Steps
-1. Test complete flow:
-   - Start both servers properly
-   - Test platform URL form
-   - Verify polling works
-   - Confirm token generation
+## Next Steps
+1. Once form submission is working:
+   - Set up proper monitoring
+   - Add CloudWatch alarms
+   - Implement user info endpoint
+   - Plan production deployment
 
-2. Implement remaining features:
-   - JWT token generation
-   - Token validation
-   - Refresh token handling
-   - UserInfo endpoint
+## References
+- Debug progress: debug-progress.md
+- Monitoring setup: monitoring.md
+- Project status: codebaseSummary.md
+- API documentation: api-documentation.md
 
-### Original Requirements Status
-- ✅ Platform URL form
-- ✅ IB Browser Login integration
-- 🔄 Token request parameters validation (Partial)
-- 🔄 Code for tokens exchange (In Progress)
-- 🔄 Token mapping storage (In Progress)
-- ❌ JWT token generation
-- ❌ Token Service implementation
-- ❌ Token validation
-- ❌ Refresh token handling
-- ❌ Userinfo handler
-- ❌ Error Handling
-
-### Technical Notes
-1. Using in-memory storage for development
-2. Simple token format for testing: `dev.{base64-encoded-json}`
-3. Need to implement proper JWT tokens later
-4. Need to add proper error handling
+## Notes
+- Local testing shows correct behavior
+- AWS infrastructure is properly configured
+- Focus is on debugging client-side issues
+- Need to improve error visibility

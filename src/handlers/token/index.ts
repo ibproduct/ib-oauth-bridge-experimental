@@ -11,6 +11,32 @@ import { storageService } from '../../services/storage';
 
 const tokenService = new TokenService();
 
+interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+  platform_url?: string;
+  client_id?: string;
+  sid?: string;
+}
+
+/**
+ * Add CORS headers to successful responses
+ */
+function successResponse(body: TokenResponse): APIGatewayProxyResult {
+  return {
+    statusCode: 200,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+    },
+    body: JSON.stringify(body)
+  };
+}
+
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
     // Parse and validate request body
@@ -126,7 +152,10 @@ async function handleAuthorizationCode(
         return {
           statusCode: 404,
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
           },
           body: JSON.stringify({
             error: error.message === 'Authentication timeout' ? 'authorization_timeout' : 'authorization_pending',
@@ -183,18 +212,12 @@ async function handleRefreshToken(
     // Get API info from stored token
     const apiInfo = tokenEntry.ibToken.content as { apiV3url: string, clientid: string };
 
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        ...tokens,
-        platform_url: apiInfo.apiV3url,
-        client_id: apiInfo.clientid,
-        sid: tokenEntry.ibToken.sid
-      })
-    };
+    return successResponse({
+      ...tokens,
+      platform_url: apiInfo.apiV3url,
+      client_id: apiInfo.clientid,
+      sid: tokenEntry.ibToken.sid
+    });
   } catch (error) {
     if (error instanceof Error && error.message.includes('refresh token')) {
       return errorResponse(createOAuthError(

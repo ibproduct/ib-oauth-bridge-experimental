@@ -42,34 +42,51 @@ This document outlines the monitoring, logging, and alerting strategy for the In
   * Throttled request latency
   * System errors
 
-### 2. Custom Metrics
+#### CloudFront Metrics
+- **Distribution Performance**
+  * Request count
+  * Error rates
+  * Cache hit/miss ratio
+  * Origin latency
+  * Bytes transferred
 
-#### Business Metrics
+- **Edge Performance**
+  * Geographic distribution
+  * SSL/TLS negotiation time
+  * First byte latency
+  * Download time
+
+### 2. Current Debug Focus
+
+#### Form Submission Monitoring
 ```typescript
-// Example custom metric publishing
-const publishAuthMetric = async (status: string) => {
-  await cloudwatch.putMetricData({
-    MetricData: [{
-      MetricName: 'AuthenticationAttempt',
-      Value: 1,
-      Unit: 'Count',
-      Dimensions: [{ Name: 'Status', Value: status }]
-    }],
-    Namespace: 'IBOAuth/Business'
-  });
+// Key areas to monitor
+const debugAreas = {
+  formSubmission: {
+    metrics: ['RequestCount', 'ErrorCount'],
+    logs: [
+      'Event object structure',
+      'Query parameters',
+      'Request headers',
+      'CORS headers'
+    ],
+    alerts: ['5xx errors', 'JavaScript errors']
+  }
 };
 ```
 
-#### OAuth Metrics
-- Authentication attempts
-- Token issuance rate
-- Token validation rate
-- Session duration
+#### Critical Metrics
+- Form submission attempts
+- JavaScript errors
+- CORS preflight requests
+- Lambda cold starts
+- API Gateway 4xx/5xx errors
 
-#### Integration Metrics
-- IB API response times
-- IB API error rates
-- Session token validity
+#### Integration Points
+- CloudFront to API Gateway
+- API Gateway to Lambda
+- Lambda to DynamoDB
+- Browser to CloudFront
 
 ## Logging Strategy
 
@@ -97,25 +114,26 @@ const publishAuthMetric = async (status: string) => {
 - INFO: Normal operations, state changes
 - DEBUG: Detailed debugging information
 
-### 2. Log Categories
+#### Log Categories
 
-#### Security Logs
-- Authentication attempts
-- Token operations
-- Access violations
-- Rate limit hits
+#### Debug Logs
+- Form submission events
+- Lambda event objects
+- CORS/headers issues
+- JavaScript errors
+- API Gateway integration
 
 #### Performance Logs
-- API response times
-- Integration latency
-- Resource utilization
-- Cache operations
+- CloudFront latency
+- API Gateway latency
+- Lambda execution time
+- DynamoDB operations
 
-#### Operational Logs
-- System startup/shutdown
-- Configuration changes
-- Background tasks
-- Maintenance operations
+#### Error Logs
+- JavaScript runtime errors
+- Lambda function errors
+- API Gateway errors
+- CORS violations
 
 ## Alerting Strategy
 
@@ -177,6 +195,10 @@ SecurityViolationAlarm:
 - Error rates
 - Latency
 - Token operations
+- CloudFront metrics
+  * Request volume
+  * Error rates
+  * Cache performance
 
 #### System Health
 - Service status
