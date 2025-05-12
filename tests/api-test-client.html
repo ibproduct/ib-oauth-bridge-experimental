@@ -100,8 +100,8 @@
             // Store state for validation
             sessionStorage.setItem('oauth_state', params.get('state'));
 
-            // Open authorization in new tab
-            window.open(`${config.authEndpoint}?${params.toString()}`, '_blank');
+            // Open authorization in same window
+            window.location.href = `${config.authEndpoint}?${params.toString()}`;
         }
 
         // Generate random state parameter

@@ -128,18 +128,12 @@ async function handleAuthorizationCode(
     // Get API info from stored token
     const apiInfo = stateEntry.ibToken.content as { apiV3url: string, clientid: string };
 
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        ...tokens,
-        platform_url: apiInfo.apiV3url,
-        client_id: apiInfo.clientid,
-        sid: stateEntry.ibToken.sid
-      })
-    };
+    return successResponse({
+      ...tokens,
+      platform_url: apiInfo.apiV3url,
+      client_id: apiInfo.clientid,
+      sid: stateEntry.ibToken.sid
+    });
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes('state')) {

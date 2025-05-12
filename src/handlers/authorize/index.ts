@@ -252,30 +252,8 @@ const FORM_HTML = `<!DOCTYPE html>
                         
                         // Listen for completion message from callback page
                         // Set up message listener before loading iframe
-                        window.addEventListener('message', async (event) => {
-                            if (event.data === 'login_complete') {
-                                // Stop polling and show success
-                                clearInterval(window.pollInterval);
-                                showStatus('Login successful! Redirecting...', 'success');
-                                
-                                // Wait a short moment for state to be updated
-                                await new Promise(resolve => setTimeout(resolve, 500));
-                                
-                                try {
-                                    // Get final redirect URL
-                                    const response = await fetch(window.location.pathname + '/poll?token=' + window.currentToken);
-                                    const data = await response.json();
-                                    
-                                    if (response.ok && data.redirect_url) {
-                                        // Redirect to final URL
-                                        window.location.href = data.redirect_url;
-                                    }
-                                } catch (error) {
-                                    console.error('Final poll error:', error);
-                                    showError('Failed to complete login');
-                                }
-                            }
-                        }, false);
+                        // No need for message event listener since we're redirecting in the same window
+                        showStatus('Login successful! Completing authentication...', 'success');
                     };
                     
                     // Load login page in iframe
@@ -297,7 +275,7 @@ const FORM_HTML = `<!DOCTYPE html>
             showStatus('Waiting for login completion...');
             document.getElementById('login-loader').style.display = 'block';
             
-            // Store interval ID in window for access from message listener
+            // Store interval ID in window
             window.pollInterval = setInterval(async () => {
                 try {
                     // Use full URL path for API Gateway
@@ -309,11 +287,15 @@ const FORM_HTML = `<!DOCTYPE html>
                         return;
                     }
                     
-                    // Stop polling for any other status
+                    // Stop polling for any response other than 404
                     clearInterval(window.pollInterval);
                     
-                    if (response.status !== 403) {
-                        // Only show error for non-403 errors
+                    if (response.ok && data.redirect_url) {
+                        // Show success and immediately redirect
+                        showStatus('Login successful! Redirecting...', 'success');
+                        window.location.href = data.redirect_url;
+                    } else {
+                        // Show error for non-success responses
                         showError(data.error_description || 'Login failed');
                     }
                 } catch (error) {
@@ -601,7 +583,6 @@ async function handlePollLogin(event: APIGatewayProxyEvent): Promise<APIGatewayP
 
     try {
       // Get session info
-      // Initial token is a string
       console.log('Checking session info with IB');
       const sessionInfo = await ibClient.getSessionInfo(stateEntry.platformUrl, stateEntry.ibToken.content as string);
       console.log('Session info received:', {
@@ -612,8 +593,14 @@ async function handlePollLogin(event: APIGatewayProxyEvent): Promise<APIGatewayP
       // Generate authorization code
       const code = Math.random().toString(36).substring(2, 15);
 
+      // Generate redirect URL first
+      const redirectUrl = generateAuthCodeRedirect(
+        stateEntry.redirectUri,
+        code,
+        stateEntry.oauthState // Use original OAuth state from initial request
+      );
+
       // Store session info with code
-      // Store code while preserving original OAuth state
       await storageService.storeState(
         stateEntry.clientId,
         stateEntry.redirectUri,
@@ -630,16 +617,8 @@ async function handlePollLogin(event: APIGatewayProxyEvent): Promise<APIGatewayP
         stateEntry.oauthState
       );
 
-      // Delete polling state
+      // Delete polling state last, after everything else is ready
       await storageService.deleteState(token);
-
-      // Generate redirect URL
-      // Generate redirect URL with original OAuth state
-      const redirectUrl = generateAuthCodeRedirect(
-        stateEntry.redirectUri,
-        code,
-        stateEntry.oauthState // Use original OAuth state from initial request
-      );
 
       return {
         statusCode: 200,
