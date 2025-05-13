@@ -7,6 +7,7 @@
 /aws/lambda/ib-oauth-authorize-dev
 /aws/lambda/ib-oauth-token-dev
 /aws/lambda/ib-oauth-callback-dev
+/aws/lambda/ib-oauth-proxy-dev
 ```
 
 ### Log Format
@@ -82,9 +83,18 @@
    - Access token lookups
    - Refresh token lookups (GSI)
    - Token refresh rate
+   - Session refresh tracking
+   - Session expiry events
 
-2. **TTL**
+2. **Session Management**
+   - Active sessions count
+   - Session refresh attempts
+   - Session age distribution
+   - Session expiry events
+
+3. **TTL**
    - Access token expiry (1h)
+   - Session timeout tracking
    - Deletion rates
 
 ## Alerts
@@ -109,6 +119,28 @@
    Metric: 5xxError
    Threshold: > 1% of requests
    Period: 1 minute
+   ```
+
+4. **Session Errors**
+   ```
+   Metric: SessionErrorRate
+   Threshold: > 5% of requests
+   Period: 5 minutes
+   Conditions:
+   - Session expired
+   - Refresh limit exceeded
+   - Invalid session
+   ```
+
+5. **Proxy Errors**
+   ```
+   Metric: ProxyErrorRate
+   Threshold: > 5% of requests
+   Period: 5 minutes
+   Conditions:
+   - IB API errors
+   - Authentication failures
+   - Session validation errors
    ```
 
 ### Warning Alerts
@@ -139,7 +171,15 @@
    - Authorization starts
    - Login completions
    - Token exchanges
+   - Session management
    - Error breakdown
+
+3. **Proxy Performance**
+   - Request volume
+   - Success rate
+   - Latency distribution
+   - Session refresh rate
+   - Error types
 
 3. **System Health**
    - Lambda health
@@ -165,7 +205,6 @@
    - Integration errors
 
 ## Log Queries
-
 ### Error Analysis
 ```
 filter @type = "REPORT"
@@ -173,8 +212,12 @@ filter @type = "REPORT"
     count(*) as total,
     count(@message like /ERROR/) as errors,
     count(@message like /invalid_request/) as invalid_requests,
-    count(@message like /server_error/) as server_errors
+    count(@message like /server_error/) as server_errors,
+    count(@message like /session_expired/) as session_expired,
+    count(@message like /refresh_limit/) as refresh_limit_exceeded,
+    count(@message like /proxy_error/) as proxy_errors
 by bin(5m)
+```
 ```
 
 ### Performance Analysis
@@ -228,6 +271,15 @@ aws dynamodb scan --table-name ib-oauth-tokens-${stage} --limit 1
    - Check token expiration
    - Verify platform URL
    - Check IB service status
+   - Validate session state
+   - Check refresh attempts
+
+2. **Session Issues**
+   - Check session expiry
+   - Verify refresh count
+   - Validate session age
+   - Monitor refresh rate
+   - Check token claims
 
 2. **State Table Issues**
    - Check TTL settings (5m/10m)
@@ -239,6 +291,8 @@ aws dynamodb scan --table-name ib-oauth-tokens-${stage} --limit 1
    - Check TTL settings (1h)
    - Monitor GSI performance
    - Verify token refresh flow
+   - Track session metrics
+   - Monitor refresh counts
    - Check capacity
 
 3. **Integration Issues**
@@ -250,9 +304,23 @@ aws dynamodb scan --table-name ib-oauth-tokens-${stage} --limit 1
 ```bash
 # Tail Lambda logs
 aws logs tail /aws/lambda/ib-oauth-authorize-dev --follow
+aws logs tail /aws/lambda/ib-oauth-proxy-dev --follow
+
+# Monitor session events
+aws logs tail /aws/lambda/ib-oauth-proxy-dev --follow | grep -E "session|refresh|token|sid"
 
 # Check API Gateway deployment
 aws apigateway get-deployments --rest-api-id n4h948fv4c
 
 # Test DynamoDB access
 aws dynamodb describe-table --table-name ib-oauth-state-dev
+
+# Monitor session metrics
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/Lambda \
+  --metric-name SessionRefreshRate \
+  --dimensions Name=FunctionName,Value=ib-oauth-proxy-dev \
+  --start-time $(date -v-1H +%s) \
+  --end-time $(date +%s) \
+  --period 300 \
+  --statistics Average Maximum

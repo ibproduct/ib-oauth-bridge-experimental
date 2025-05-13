@@ -85,11 +85,91 @@ grant_type=authorization_code
   "refresh_token": "{refresh_token}",
   "apiV3url": "https://company.intelligencebank.com/api/v3",
   "clientid": "{ib_client_id}",
-  "sid": "{ib_session_id}"
+  "sid": "{ib_session_id}",
+  "logintimeoutperiod": 24,  // Session validity in hours
+  "sidExpiry": 1747234779,   // Unix timestamp
+  "sidCreatedAt": 1747148379 // Unix timestamp
 }
 ```
 
-### 3. Error Cases
+### 3. Session Management
+
+#### Token Refresh
+```bash
+# Test endpoint
+POST /token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token
+&refresh_token={refresh_token}
+&client_id=test-client
+
+# Expected response
+{
+  "access_token": "{new_access_token}",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "{new_refresh_token}",
+  "sid": "{ib_session_id}",
+  "sidExpiry": 1747234779,
+  "sidCreatedAt": 1747148379
+}
+```
+
+#### Session Expiry
+```bash
+# Test expired session
+GET /proxy/{path}
+Authorization: Bearer {token_with_expired_sid}
+
+# Expected response
+{
+  "error": "invalid_token",
+  "error_description": "Session has expired"
+}
+```
+
+#### Refresh Limit
+```bash
+# Test exceeded refresh limit
+POST /token
+grant_type=refresh_token&refresh_token={token_with_max_refreshes}
+
+# Expected response
+{
+  "error": "invalid_token",
+  "error_description": "Session refresh limit exceeded"
+}
+```
+
+### 4. Proxy Integration
+
+#### API Request
+```bash
+# Test endpoint
+GET /proxy/company.intelligencebank.com/api/3.0.0/users
+Authorization: Bearer {access_token}
+
+# Expected response
+{
+  // IB API response data
+}
+```
+
+#### Error Cases
+```bash
+# Test invalid token
+GET /proxy/{path}
+Authorization: Bearer invalid-token
+
+# Expected response
+{
+  "error": "invalid_token",
+  "error_description": "Invalid or expired access token"
+}
+```
+
+### 5. Error Cases
 
 #### Invalid OAuth Parameters
 ```bash
@@ -138,6 +218,9 @@ grant_type=authorization_code&code=invalid-code
 5. Verify redirect with code
 6. Verify token exchange
 7. Check session info
+8. Test API proxy calls
+9. Verify session refresh
+10. Test session expiry
 
 ### Automated Tests
 ```bash
@@ -157,14 +240,23 @@ aws logs tail /aws/lambda/ib-oauth-authorize-dev --follow
 
 # Watch token logs
 aws logs tail /aws/lambda/ib-oauth-token-dev --follow
+
+# Watch proxy logs
+aws logs tail /aws/lambda/ib-oauth-proxy-dev --follow
+
+# Monitor session events
+aws logs tail /aws/lambda/ib-oauth-proxy-dev --follow | grep -E "session|refresh|token|sid"
 ```
 
 ### Metrics to Monitor
 1. Authorization success rate
 2. Token exchange success rate
-3. Error rates by type
-4. API latency
-5. State table operations
+3. Session refresh rate
+4. Session expiry events
+5. Proxy request success rate
+6. Error rates by type
+7. API latency
+8. State table operations
 
 ## Test Data Cleanup
 
@@ -199,6 +291,15 @@ aws dynamodb delete-item \
    - Check token expiration
    - Verify platform URL
    - Check IB service status
+   - Validate session state
+   - Check refresh attempts
+
+4. Session Issues
+   - Check session expiry time
+   - Verify refresh count
+   - Validate session age
+   - Monitor refresh rate
+   - Check token claims
 
 ### Debug Tools
 1. CloudWatch Logs

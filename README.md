@@ -2,6 +2,37 @@
 
 This service provides OAuth 2.0 compatibility for IntelligenceBank's Browser Login API, allowing applications to integrate with IntelligenceBank using standard OAuth 2.0 flows.
 
+## Quick Start
+
+1. **Initialize OAuth Flow**
+   ```javascript
+   const authUrl = 'https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/authorize?' +
+     new URLSearchParams({
+       response_type: 'code',
+       client_id: 'your_client_id',
+       redirect_uri: 'https://your-app.com/callback',
+       scope: 'profile',
+       state: 'random_state_123'
+     });
+   window.location.href = authUrl;
+   ```
+
+2. **Handle Callback**
+   ```javascript
+   // In your callback route
+   const code = new URLSearchParams(window.location.search).get('code');
+   const tokens = await exchangeCode(code);
+   ```
+
+3. **Make API Requests**
+   ```javascript
+   const response = await fetch('/proxy/company.intelligencebank.com/api/3.0.0/users', {
+     headers: {
+       'Authorization': `Bearer ${tokens.access_token}`
+     }
+   });
+   ```
+
 ## Overview
 
 IntelligenceBank is a SaaS platform where each client has their own platform URL. This OAuth bridge service supports dynamic platform URLs, allowing clients to authenticate users against their specific IntelligenceBank instance.
@@ -62,20 +93,32 @@ IntelligenceBank is a SaaS platform where each client has their own platform URL
     Authorization: Bearer {access_token}
     ```
 
-    Example:
-    ```
-    GET /dev/proxy/company.intelligencebank.com/api/3.0.0/12345/users
+    Examples:
+    ```bash
+    # Get users
+    GET /proxy/company.intelligencebank.com/api/3.0.0/users
     Authorization: Bearer {access_token}
+
+    # Search assets
+    GET /proxy/company.intelligencebank.com/api/3.0.0/assets/search?query=marketing
+    Authorization: Bearer {access_token}
+
+    # Upload file
+    POST /proxy/company.intelligencebank.com/api/3.0.0/assets/upload
+    Authorization: Bearer {access_token}
+    Content-Type: multipart/form-data
+
+    # Update metadata
+    PATCH /proxy/company.intelligencebank.com/api/3.0.0/assets/123
+    Authorization: Bearer {access_token}
+    Content-Type: application/json
     ```
 
-    Response:
-    ```json
-    {
-      // IntelligenceBank API response
-    }
-    ```
-
-    Note: Do not include 'https://' in the proxy path - it is automatically added by the server.
+    Notes:
+    - Do not include 'https://' in the proxy path - it is automatically added
+    - All HTTP methods are supported (GET, POST, PUT, PATCH, DELETE)
+    - Request/response bodies are passed through unchanged
+    - Headers are forwarded (except Authorization which is handled by the proxy)
 
 6. **Access User Info**
     ```
@@ -159,14 +202,26 @@ async function pollAuthStatus(authCode) {
 
 ### 3. Token and Session Management
 
-1. Store tokens securely
-2. Use access token for API requests
-3. Handle session timeouts:
+1. **Token Storage**
+   - Store tokens securely (e.g., encrypted in localStorage or secure cookie)
+   - Never expose tokens in URLs or logs
+   - Clear tokens on logout/session expiry
+
+2. **Session Lifecycle**
    - Each session has a `logintimeoutperiod` (1-120 hours)
    - Server tracks session expiry and refresh attempts
-   - When session expires, client must re-authenticate
+   - 5-minute refresh window before expiry
+   - Maximum refresh attempts configurable
+   - Re-authentication required after session expiry
 
-4. Implement token refresh when access token expires or session needs refresh:
+3. **Best Practices**
+   - Implement automatic token refresh
+   - Handle session expiry gracefully
+   - Store session metadata (sidExpiry, sidCreatedAt)
+   - Monitor refresh counts
+   - Clear session on errors
+
+4. **Token Refresh Implementation**:
 
 ```javascript
 async function refreshTokens(refreshToken) {
@@ -191,7 +246,47 @@ async function refreshTokens(refreshToken) {
 
 ## Error Handling
 
-The service follows OAuth 2.0 error response formats:
+The service follows OAuth 2.0 error response formats. Here's how to handle common scenarios:
+
+### 1. Token Expiry
+```javascript
+async function handleApiRequest(url, token) {
+  try {
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    if (response.status === 401) {
+      const error = await response.json();
+      if (error.error === 'invalid_token') {
+        // Try token refresh
+        const newTokens = await refreshTokens(refreshToken);
+        // Retry request with new token
+        return handleApiRequest(url, newTokens.access_token);
+      }
+    }
+    
+    return response.json();
+  } catch (error) {
+    handleError(error);
+  }
+}
+```
+
+### 2. Session Expiry
+```javascript
+function handleSessionExpiry(error) {
+  if (error.error === 'invalid_token' &&
+      error.error_description.includes('Session has expired')) {
+    // Clear tokens
+    clearStoredTokens();
+    // Redirect to login
+    window.location.href = getAuthUrl();
+  }
+}
+```
+
+### 3. Error Response Formats
 
 1. Authorization Errors
    - Redirects to `redirect_uri` with error parameters
@@ -257,13 +352,34 @@ This follows OAuth 2.0 best practices where the client is responsible for:
 - Authorization endpoint: 10 requests per minute per IP
 - Token endpoint: 20 requests per minute per client
 - UserInfo endpoint: 30 requests per minute per token
+- Proxy endpoints: 100 requests per minute per token
+- Refresh endpoint: 30 requests per minute per client
+
+Rate limit headers are included in responses:
+```http
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1620000000
+```
 
 ## Support
 
 For integration support or issues:
-1. Check the [API Documentation](cline_docs/api-documentation.md)
-2. Open an issue in this repository
-3. Contact IntelligenceBank support
+
+1. **Documentation**
+   - [API Documentation](cline_docs/api-documentation.md)
+   - [Error Codes](cline_docs/api-documentation.md#error-codes)
+   - [Best Practices](cline_docs/api-documentation.md#best-practices)
+
+2. **Sample Code**
+   - [JavaScript SDK](examples/javascript/)
+   - [Python Client](examples/python/)
+   - [Integration Examples](examples/integrations/)
+
+3. **Support Channels**
+   - Open an issue in this repository
+   - Contact IntelligenceBank support
+   - Join our developer community
 
 ## License
 

@@ -92,7 +92,7 @@ GET /authorize/poll
 
 ## Token Endpoint
 
-### Exchange Authorization Code
+### 1. Exchange Authorization Code
 ```http
 POST /token
 Content-Type: application/x-www-form-urlencoded
@@ -112,7 +112,10 @@ Content-Type: application/x-www-form-urlencoded
   "refresh_token": "refresh_token_xyz",
   "apiV3url": "https://company.intelligencebank.com/api/v3",
   "clientid": "ib_client_id",
-  "sid": "ib_session_id"
+  "sid": "ib_session_id",
+  "logintimeoutperiod": 24,  // Session validity in hours (1-120)
+  "sidExpiry": 1747234779,   // Unix timestamp when session expires
+  "sidCreatedAt": 1747148379 // Unix timestamp when session was created
 }
 ```
 
@@ -124,12 +127,83 @@ Content-Type: application/x-www-form-urlencoded
 }
 ```
 
+### 2. Refresh Token
+```http
+POST /token
+Content-Type: application/x-www-form-urlencoded
+```
+
+#### Request Body
+- `grant_type` (required): Must be "refresh_token"
+- `refresh_token` (required): Refresh token from previous token response
+- `client_id` (required): OAuth client ID
+
+#### Success Response
+```json
+{
+  "access_token": "new_access_token_xyz",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "new_refresh_token_xyz",
+  "sid": "ib_session_id",
+  "sidExpiry": 1747234779,
+  "sidCreatedAt": 1747148379
+}
+```
+
+#### Error Response
+```json
+{
+  "error": "invalid_grant",
+  "error_description": "Invalid refresh token"
+}
+```
+
+## Proxy Endpoint
+
+### Forward Request to IB API
+```http
+ANY /proxy/{proxy+}
+Authorization: Bearer <access_token>
+```
+
+#### Path Parameters
+- `proxy+` (required): Full IB API path including domain and endpoint
+  Example: `company.intelligencebank.com/api/3.0.0/users`
+
+#### Headers
+- `Authorization` (required): Bearer token from token endpoint
+- `Content-Type`: Application/JSON for requests with body
+- `Accept`: Application/JSON
+
+#### Success Response
+```json
+{
+  // IB API response data
+}
+```
+
+#### Error Response
+```json
+{
+  "error": "invalid_token",
+  "error_description": "Session has expired"
+}
+```
+
 ## Error Codes
 
 ### OAuth 2.0 Errors
 - `invalid_request`: Missing or invalid parameters
+- `invalid_token`: Invalid or expired access token
+- `invalid_grant`: Invalid refresh token
 - `server_error`: Internal server error
 - `authorization_pending`: Login not yet complete
+
+### Session Errors
+- `session_expired`: Session has exceeded its timeout period
+- `refresh_limit_exceeded`: Maximum refresh attempts reached
+- `session_invalid`: Session is no longer valid
 
 ### HTTP Status Codes
 - `200`: Success
@@ -173,26 +247,34 @@ Access-Control-Allow-Headers: Content-Type, Authorization
   - Auth codes: 10 minutes
 
 #### Token Table (`ib-oauth-tokens-${stage}`)
-- **Purpose**: Stores OAuth tokens
+- **Purpose**: Stores OAuth tokens and session state
 - **Schema**:
   ```typescript
   {
-    accessToken: string,  // Partition key
-    refreshToken: string, // GSI key
-    clientId: string,    // OAuth client ID
-    scope: string,      // OAuth scope
-    ibToken: {          // IB session info
+    accessToken: string,   // Partition key
+    refreshToken: string,  // GSI key
+    clientId: string,     // OAuth client ID
+    scope: string,       // OAuth scope
+    ibToken: {           // IB session info
       sid: string,
       content: {
         apiV3url: string,
-        clientid: string
+        clientid: string,
+        logintimeoutperiod: number // Session validity in hours
       }
     },
-    platformUrl: string, // IB platform URL
-    expires: number     // TTL timestamp
+    platformUrl: string,  // IB platform URL
+    sidExpiry: number,   // Session expiry timestamp
+    sidCreatedAt: number, // Session creation timestamp
+    refreshCount: number, // Number of refresh attempts
+    expires: number      // TTL timestamp
   }
   ```
 - **TTL**: 1 hour for access tokens
+- **Session Management**:
+  - Refresh window: 5 minutes before expiry
+  - Maximum refresh attempts: Configurable (default 5)
+  - Session age limit: Based on logintimeoutperiod
 ```
 
 ## Security Considerations
@@ -202,10 +284,13 @@ Access-Control-Allow-Headers: Content-Type, Authorization
 - Validate redirect URIs
 - Check origins
 
-### 2. Token Security
+### 2. Token & Session Security
 - Short-lived auth codes
 - Secure token storage
 - HTTPS only
+- Session expiry enforcement
+- Refresh attempt limiting
+- Session age validation
 
 ### 3. Error Handling
 - Don't leak sensitive info
