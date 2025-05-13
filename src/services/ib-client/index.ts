@@ -6,10 +6,11 @@ export interface IBAuthResponse {
     apiV3url: string;
     clientid: string;
   };
+  logintimeoutperiod?: number; // Session validity in hours (1-120)
 }
 
 export interface IBSessionInfo {
-  SID: string;
+  sid: string;
   content: {
     session: {
       sid: string;
@@ -25,6 +26,25 @@ export interface IBSessionInfo {
       email?: string;
     };
   };
+}
+
+export interface ProxyRequest {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  body?: string;
+  sid: string;
+}
+
+export interface ProxyResponse {
+  status: number;
+  data: unknown;
+}
+
+// Type for IB API error response
+export interface IBApiError {
+  status: number;
+  data: unknown;
 }
 
 export class IBClient {
@@ -61,8 +81,6 @@ export class IBClient {
 
   /**
    * Get initial authentication token from IB
-   * @param platformUrl IntelligenceBank platform URL
-   * @returns Promise<IBAuthResponse>
    */
   async getInitialToken(platformUrl: string): Promise<IBAuthResponse> {
     this.initializeClient(platformUrl);
@@ -78,9 +96,6 @@ export class IBClient {
 
   /**
    * Get session information using SID
-   * @param platformUrl IntelligenceBank platform URL
-   * @param sid Session ID from IB
-   * @returns Promise<IBSessionInfo>
    */
   async getSessionInfo(platformUrl: string, sid: string): Promise<IBSessionInfo> {
     this.initializeClient(platformUrl);
@@ -98,11 +113,6 @@ export class IBClient {
 
   /**
    * Generate IB login URL
-   * @param platformUrl IntelligenceBank platform URL
-   * @param token Initial token from getInitialToken
-   * @param redirectUri OAuth redirect URI
-   * @param state OAuth state parameter
-   * @returns string Login URL
    */
   generateLoginUrl(
     platformUrl: string,
@@ -114,11 +124,6 @@ export class IBClient {
 
   /**
    * Poll for session completion
-   * @param platformUrl IntelligenceBank platform URL
-   * @param sid Session ID to poll
-   * @param maxAttempts Maximum number of polling attempts
-   * @param interval Polling interval in milliseconds
-   * @returns Promise<IBSessionInfo>
    */
   async pollSessionCompletion(
     platformUrl: string,
@@ -142,6 +147,47 @@ export class IBClient {
       }
     }
     throw new Error('Authentication timeout');
+  }
+
+  /**
+   * Proxy request to IB API
+   */
+  async proxyRequest(request: ProxyRequest): Promise<ProxyResponse> {
+    const url = new URL(request.url);
+    this.initializeClient(`https://${url.hostname}`);
+
+    try {
+      console.log('Making IB API request:', {
+        method: request.method,
+        url: request.url,
+        headers: request.headers
+      });
+
+      // Ensure we're using the SID in the Authorization header
+      // Add sid to request headers
+      const response = await this.client!.request({
+        method: request.method,
+        url: url.pathname + url.search,
+        headers: {
+          ...request.headers,
+          'sid': request.sid
+        },
+        data: request.body
+      });
+
+      return {
+        status: response.status,
+        data: response.data
+      };
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        return {
+          status: error.response.status,
+          data: error.response.data
+        };
+      }
+      throw error;
+    }
   }
 }
 

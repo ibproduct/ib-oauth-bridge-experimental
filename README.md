@@ -56,21 +56,42 @@ IntelligenceBank is a SaaS platform where each client has their own platform URL
    }
    ```
 
-5. **Access Protected Resources**
-   ```
-   GET /userinfo
-   Authorization: Bearer {access_token}
-   ```
+5. **Access IntelligenceBank API**
+    ```
+    GET /proxy/{ib-api-path}
+    Authorization: Bearer {access_token}
+    ```
 
-   Response:
-   ```json
-   {
-     "sub": "user_id",
-     "name": "User Name",
-     "email": "user@example.com",
-     "email_verified": true
-   }
-   ```
+    Example:
+    ```
+    GET /dev/proxy/company.intelligencebank.com/api/3.0.0/12345/users
+    Authorization: Bearer {access_token}
+    ```
+
+    Response:
+    ```json
+    {
+      // IntelligenceBank API response
+    }
+    ```
+
+    Note: Do not include 'https://' in the proxy path - it is automatically added by the server.
+
+6. **Access User Info**
+    ```
+    GET /userinfo
+    Authorization: Bearer {access_token}
+    ```
+
+    Response:
+    ```json
+    {
+      "sub": "user_id",
+      "name": "User Name",
+      "email": "user@example.com",
+      "email_verified": true
+    }
+    ```
 
 ## Implementation Guide
 
@@ -136,11 +157,16 @@ async function pollAuthStatus(authCode) {
 }
 ```
 
-### 3. Token Management
+### 3. Token and Session Management
 
 1. Store tokens securely
 2. Use access token for API requests
-3. Implement token refresh when access token expires:
+3. Handle session timeouts:
+   - Each session has a `logintimeoutperiod` (1-120 hours)
+   - Server tracks session expiry and refresh attempts
+   - When session expires, client must re-authenticate
+
+4. Implement token refresh when access token expires or session needs refresh:
 
 ```javascript
 async function refreshTokens(refreshToken) {
@@ -181,11 +207,41 @@ The service follows OAuth 2.0 error response formats:
    }
    ```
 
-3. Resource Endpoint Errors
+3. Session Errors
+   ```json
+   {
+     "error": "invalid_token",
+     "error_description": "Session refresh limit exceeded"
+   }
+   ```
+   ```json
+   {
+     "error": "invalid_token",
+     "error_description": "Session has expired"
+   }
+   ```
+
+4. Resource Endpoint Errors
    ```
    HTTP/1.1 401 Unauthorized
    WWW-Authenticate: Bearer error="invalid_token"
    ```
+
+### Session Expiry Handling
+
+When a session expires (due to timeout or maximum refresh attempts):
+
+1. Server returns `invalid_token` error with appropriate description
+2. Client should:
+   - Clear stored tokens
+   - Redirect user to authorization endpoint
+   - Begin new OAuth flow
+3. Do not attempt to refresh tokens for expired sessions
+
+This follows OAuth 2.0 best practices where the client is responsible for:
+- Detecting expired sessions via error responses
+- Initiating re-authentication when needed
+- Managing the user experience during re-authentication
 
 ## Security Considerations
 

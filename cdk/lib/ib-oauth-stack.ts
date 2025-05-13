@@ -95,6 +95,19 @@ export class IBOAuthStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(10),
     });
 
+    const proxyFunction = new lambda.Function(this, 'ProxyFunction', {
+      functionName: `ib-oauth-proxy-${props.stage}`,
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset('dist/proxy'),
+      environment: {
+        TOKEN_TABLE: tokenTable.tableName,
+        STAGE: props.stage,
+      },
+      memorySize: 256,
+      timeout: cdk.Duration.seconds(30), // Longer timeout for API proxying
+    });
+
     // Grant DynamoDB permissions
     // State table access
     stateTable.grantReadWriteData(authorizeFunction);
@@ -104,6 +117,7 @@ export class IBOAuthStack extends cdk.Stack {
     // Token table access
     tokenTable.grantReadWriteData(tokenFunction);
     tokenTable.grantReadData(userinfoFunction);
+    tokenTable.grantReadData(proxyFunction);
 
     // Test Client Hosting
     const testClientBucket = new s3.Bucket(this, 'TestClientBucket', {
@@ -414,6 +428,66 @@ export class IBOAuthStack extends cdk.Stack {
           'method.response.header.Access-Control-Allow-Origin': true,
         },
       }],
+    });
+
+    // Add proxy endpoint with greedy path parameter
+    const proxy = api.root.addResource('proxy');
+    const proxyPath = proxy.addResource('{proxy+}');
+
+    // Add proxy methods with CORS
+    const proxyIntegration = new apigateway.LambdaIntegration(proxyFunction, {
+      proxy: true,
+      integrationResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': "'*'",
+          'method.response.header.Access-Control-Allow-Methods': "'GET,POST,PUT,DELETE,OPTIONS'",
+          'method.response.header.Access-Control-Allow-Headers': "'Content-Type,Authorization'",
+          'method.response.header.Content-Type': 'integration.response.header.Content-Type'
+        }
+      }]
+    });
+
+    // Add methods for all HTTP verbs
+    ['GET', 'POST', 'PUT', 'DELETE'].forEach(method => {
+      proxyPath.addMethod(method, proxyIntegration, {
+        methodResponses: [{
+          statusCode: '200',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+            'method.response.header.Access-Control-Allow-Methods': true,
+            'method.response.header.Access-Control-Allow-Headers': true,
+            'method.response.header.Content-Type': true
+          }
+        }]
+      });
+    });
+
+    // Add OPTIONS method for CORS
+    proxyPath.addMethod('OPTIONS', new apigateway.MockIntegration({
+      integrationResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': "'*'",
+          'method.response.header.Access-Control-Allow-Methods': "'GET,POST,PUT,DELETE,OPTIONS'",
+          'method.response.header.Access-Control-Allow-Headers': "'Content-Type,Authorization'",
+          'method.response.header.Content-Type': "'application/json'"
+        }
+      }],
+      passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
+      requestTemplates: {
+        'application/json': '{"statusCode": 200}'
+      }
+    }), {
+      methodResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Methods': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Content-Type': true
+        }
+      }]
     });
 
     // Stack Outputs

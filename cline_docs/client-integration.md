@@ -1,6 +1,7 @@
 # Client Integration Guide
 
 ## Overview
+
 This guide explains how to integrate with the OAuth service and use the IB API proxy endpoint. The service provides a standard OAuth 2.0 flow for authentication and a simple proxy endpoint for making IB API calls.
 
 ## Authentication Flow
@@ -50,6 +51,39 @@ const apiClient = axios.create({
     'Authorization': `Bearer ${access_token}`
   }
 });
+
+// Add refresh interceptor for session management
+apiClient.interceptors.response.use(
+  response => response,
+  async error => {
+    if (error.response?.status === 401) {
+      const errorData = error.response.data;
+      
+      if (errorData.error === 'invalid_token') {
+        if (errorData.error_description === 'Session has expired' ||
+            errorData.error_description === 'Session refresh limit exceeded') {
+          // Session expired - need to re-authenticate
+          clearTokens();
+          redirectToAuth();
+          return;
+        }
+        
+        // Try token refresh
+        try {
+          const newTokens = await refreshTokens(refresh_token);
+          error.config.headers['Authorization'] = `Bearer ${newTokens.access_token}`;
+          return apiClient.request(error.config);
+        } catch (refreshError) {
+          // Refresh failed - need to re-authenticate
+          clearTokens();
+          redirectToAuth();
+          return;
+        }
+      }
+    }
+    throw error;
+  }
+);
 ```
 
 ### Making Requests
@@ -83,6 +117,81 @@ try {
 }
 ```
 
+Note: Do not include 'https://' in the proxy paths - it is automatically added by the server.
+
+## Session Management
+
+### Session Lifecycle
+
+1. Initial Authentication
+   - User completes OAuth flow
+   - Server provides access token and session info
+   - Session timeout period (logintimeoutperiod) is 1-120 hours
+
+2. Active Session
+   - Use access token for API calls
+   - Server tracks session expiry
+   - Server manages refresh attempts
+
+3. Session Refresh
+   - Server automatically refreshes when needed
+   - Tracks number of refresh attempts
+   - Enforces maximum refresh limit
+
+4. Session Expiry
+   - Occurs when:
+     * Session timeout period exceeded
+     * Maximum refresh attempts reached
+   - Client must re-authenticate user
+
+### Handling Session Expiry
+
+When a session expires, the server returns:
+```json
+{
+  "error": "invalid_token",
+  "error_description": "Session has expired"
+}
+```
+or
+```json
+{
+  "error": "invalid_token",
+  "error_description": "Session refresh limit exceeded"
+}
+```
+
+Client should:
+1. Clear stored tokens
+2. Redirect to authorization endpoint
+3. Begin new OAuth flow
+
+Example Implementation:
+```typescript
+function handleSessionExpiry() {
+  // Clear stored tokens
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+
+  // Save current state if needed
+  localStorage.setItem('pre_auth_path', window.location.pathname);
+
+  // Redirect to authorization
+  window.location.href = getAuthUrl();
+}
+
+// Usage in API client
+if (error.response?.status === 401) {
+  const errorData = error.response.data;
+  if (errorData.error === 'invalid_token' && 
+      (errorData.error_description === 'Session has expired' ||
+       errorData.error_description === 'Session refresh limit exceeded')) {
+    handleSessionExpiry();
+    return;
+  }
+}
+```
+
 ## Error Handling
 
 ### OAuth Errors
@@ -112,7 +221,15 @@ try {
   if (error.response) {
     switch (error.response.status) {
       case 401:
-        // Token expired - refresh token or re-authenticate
+        // Check for session expiry
+        if (error.response.data.error === 'invalid_token') {
+          if (error.response.data.error_description === 'Session has expired' ||
+              error.response.data.error_description === 'Session refresh limit exceeded') {
+            handleSessionExpiry();
+            return;
+          }
+        }
+        // Other token errors - try refresh
         break;
       case 403:
         // Insufficient permissions
@@ -127,49 +244,6 @@ try {
 }
 ```
 
-## Token Refresh
-
-### Refresh Flow
-```typescript
-async function refreshToken(refresh_token: string) {
-  const response = await fetch('https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token
-    })
-  });
-
-  const tokens = await response.json();
-  // Update stored tokens
-  return tokens.access_token;
-}
-```
-
-### Automatic Refresh Example
-```typescript
-// Create axios instance with refresh interceptor
-const apiClient = axios.create({
-  baseURL: 'https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy'
-});
-
-apiClient.interceptors.response.use(
-  response => response,
-  async error => {
-    if (error.response?.status === 401) {
-      // Token expired
-      const newToken = await refreshToken(refresh_token);
-      error.config.headers['Authorization'] = `Bearer ${newToken}`;
-      return apiClient.request(error.config);
-    }
-    return Promise.reject(error);
-  }
-);
-```
-
 ## Best Practices
 
 ### Security
@@ -177,6 +251,7 @@ apiClient.interceptors.response.use(
 2. Use HTTPS for all requests
 3. Implement proper error handling
 4. Follow OAuth 2.0 security guidelines
+5. Clear tokens on session expiry
 
 ### Performance
 1. Reuse API client instance
@@ -187,8 +262,16 @@ apiClient.interceptors.response.use(
 ### Error Handling
 1. Handle all error cases
 2. Implement token refresh
-3. Add request retry logic
-4. Log errors appropriately
+3. Handle session expiry
+4. Add request retry logic
+5. Log errors appropriately
+
+### Session Management
+1. Track session state
+2. Handle expiry gracefully
+3. Preserve user context
+4. Implement smooth re-auth
+5. Clear invalid sessions
 
 ## Example Implementation
 
@@ -212,13 +295,35 @@ class IBAPIClient {
       response => response,
       async error => {
         if (error.response?.status === 401) {
-          const newToken = await this.handleTokenRefresh();
-          error.config.headers['Authorization'] = `Bearer ${newToken}`;
-          return this.apiClient.request(error.config);
+          const errorData = error.response.data;
+          
+          if (errorData.error === 'invalid_token') {
+            if (errorData.error_description === 'Session has expired' ||
+                errorData.error_description === 'Session refresh limit exceeded') {
+              this.handleSessionExpiry();
+              return;
+            }
+            
+            const newToken = await this.handleTokenRefresh();
+            error.config.headers['Authorization'] = `Bearer ${newToken}`;
+            return this.apiClient.request(error.config);
+          }
         }
         return Promise.reject(error);
       }
     );
+  }
+
+  private handleSessionExpiry() {
+    // Clear tokens
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+
+    // Save state
+    localStorage.setItem('pre_auth_path', window.location.pathname);
+
+    // Redirect to auth
+    window.location.href = this.getAuthUrl();
   }
 
   private async handleTokenRefresh() {
@@ -252,10 +357,10 @@ const users = await client.getUsers();
 ## Troubleshooting
 
 ### Common Issues
-1. Token expired
-   - Implement token refresh
-   - Check token expiration
-   - Verify refresh token
+1. Session expiry
+   - Check error responses
+   - Verify token refresh
+   - Handle re-auth flow
 
 2. Rate limiting
    - Implement backoff

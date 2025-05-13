@@ -54,7 +54,10 @@
 
     <div>
         <h2>Step 3: Test IB API Call</h2>
-        <a href="#" class="button" onclick="testIBApi()" id="test-api-button" style="display: none;">Test IB API</a>
+        <div>
+            <a href="#" class="button" onclick="testIBApi()" id="test-api-button" style="display: none;">Test IB API</a>
+            <a href="#" class="button" onclick="testSessionManagement()" id="test-session-button" style="display: none;">Test Session Management</a>
+        </div>
         <div id="test-api-result" class="result"></div>
     </div>
 
@@ -175,6 +178,7 @@
                     
                     showCallbackResult('Successfully received tokens:\n' + JSON.stringify(data, null, 2), false);
                     document.getElementById('test-api-button').style.display = 'inline-block';
+                    document.getElementById('test-session-button').style.display = 'inline-block';
                 } else {
                     showCallbackResult('Error:\n' + JSON.stringify(data, null, 2), true);
                 }
@@ -194,34 +198,72 @@
             try {
                 logDebug('Testing IB API', { apiV3url, clientId, sid });
                 // Remove https:// and construct the URL parts
+                // Remove https:// and construct the path
                 const domain = apiV3url.replace('https://', '');
                 const endpoint = `api/3.0.0/${clientId}/filter.limit(100).order(createTime:-1)`;
                 const params = 'verbose=null&productkey=5A4E1D1A432440B3AA2B381D946DB64B';
                 
-                // Combine parts - add https:// back
-                const proxyUrl = `https://intelligencebank-proxy.herokuapp.com/https://${domain}/${endpoint}?${params}`;
+                // Use our proxy endpoint
+                const proxyUrl = `${apiGatewayUrl}/proxy/${domain}/${endpoint}?${params}`;
 
                 const response = await fetch(proxyUrl, {
                     method: 'GET',
                     headers: {
-                        'sid': sid
+                        'Authorization': `Bearer ${accessToken}`
                     }
                 });
 
                 console.log('Making API call:', {
                     url: proxyUrl,
                     headers: {
-                        'sid': sid
+                        'Authorization': `Bearer ${accessToken}`
                     }
                 });
 
                 const data = await response.json();
+                
+                // Handle errors after parsing response
+                if (!response.ok) {
+                    if (response.status === 401 && data.error === 'invalid_token') {
+                        if (data.error_description === 'Session has expired' ||
+                            data.error_description === 'Session refresh limit exceeded') {
+                            // Clear tokens and restart OAuth flow
+                            sessionStorage.clear();
+                            showTestApiResult('Session expired. Please re-authenticate.', true);
+                            document.getElementById('test-api-button').style.display = 'none';
+                            document.getElementById('test-session-button').style.display = 'none';
+                            return;
+                        }
+                    }
+                    throw new Error(`API Error: ${data.error_description || 'Unknown error'}`);
+                }
                 logDebug('API response', data);
                 showTestApiResult(JSON.stringify(data, null, 2), false);
             } catch (error) {
                 logDebug('API error', { error: error.message, stack: error.stack });
                 showTestApiResult('Error: ' + error.message, true);
             }
+        }
+
+        // Test session management with multiple API calls
+        async function testSessionManagement() {
+            const totalCalls = 10;  // Number of API calls to make
+            const delayBetweenCalls = 5000;  // 5 seconds between calls
+            
+            showTestApiResult('Starting session management test...', false);
+            
+            for (let i = 0; i < totalCalls; i++) {
+                try {
+                    showTestApiResult(`Making API call ${i + 1} of ${totalCalls}...`, false);
+                    await testIBApi();
+                    await new Promise(resolve => setTimeout(resolve, delayBetweenCalls));
+                } catch (error) {
+                    showTestApiResult(`Error on call ${i + 1}: ${error.message}`, true);
+                    return;
+                }
+            }
+            
+            showTestApiResult('Session management test completed', false);
         }
 
         function showCallbackResult(text, isError = false) {

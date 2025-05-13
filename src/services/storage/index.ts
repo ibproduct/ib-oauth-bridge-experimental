@@ -25,6 +25,11 @@ export interface TokenEntry {
   platformUrl: string;
   createdAt: number;
   expires: number;
+  
+  // Session management fields
+  sidExpiry: number;      // Calculated from logintimeoutperiod
+  sidCreatedAt: number;   // When sid was first created
+  refreshCount: number;   // Track refresh attempts
 }
 
 const ddbClient = new DynamoDBClient({});
@@ -104,6 +109,10 @@ export class DynamoDBStorageService {
     const now = Math.floor(Date.now() / 1000);
     const ttl = now + 3600; // 1 hour
 
+    // Calculate session expiry from logintimeoutperiod (default 24h if not specified)
+    const loginTimeoutHours = ibToken.logintimeoutperiod || 24;
+    const sidExpiry = now + (loginTimeoutHours * 3600);
+
     await ddb.put({
       TableName: this.tokenTableName,
       Item: {
@@ -114,7 +123,10 @@ export class DynamoDBStorageService {
         ibToken,
         platformUrl,
         createdAt: now,
-        expires: ttl
+        expires: ttl,
+        sidExpiry,
+        sidCreatedAt: now,
+        refreshCount: 0
       }
     });
   }

@@ -120,14 +120,20 @@ async function handleAuthorizationCode(
       ));
     }
 
+    // Calculate session expiry from logintimeoutperiod
+    const loginTimeoutHours = stateEntry.ibToken.logintimeoutperiod || 24;
+    const now = Math.floor(Date.now() / 1000);
+    const sidExpiry = now + (loginTimeoutHours * 3600);
+
     // Generate OAuth tokens using stored info
     const tokens = await tokenService.generateTokens({
       sub: stateEntry.ibToken.sid,
-      scope: stateEntry.scope
+      scope: stateEntry.scope,
+      sid: stateEntry.ibToken.sid,
+      sidExp: sidExpiry
     });
 
     // Store token mapping
-    // Store token with the same IB token for session info
     await storageService.storeToken(
       tokens.access_token,
       tokens.refresh_token,
@@ -198,14 +204,40 @@ async function handleRefreshToken(
       ));
     }
 
-    // Generate new tokens using stored info
-    const tokens = await tokenService.generateTokens({
-      sub: tokenEntry.ibToken.sid,
-      scope: tokenEntry.scope
-    });
+    try {
+      // Validate session refresh attempt
+      await tokenService.validateRefreshAttempt(tokenEntry);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === 'Maximum refresh attempts exceeded') {
+          return errorResponse(createOAuthError(
+            OAuthErrorType.INVALID_REQUEST,
+            'Session refresh limit exceeded'
+          ));
+        }
+        if (error.message === 'Session maximum age exceeded') {
+          return errorResponse(createOAuthError(
+            OAuthErrorType.INVALID_REQUEST,
+            'Session has expired'
+          ));
+        }
+      }
+      throw error;
+    }
 
-    // Store new token mapping
-    // Store token with the same IB token for session info
+    // Generate new tokens using stored info
+    const tokens = await tokenService.refreshTokens(
+      refreshToken,
+      {
+        sub: tokenEntry.ibToken.sid,
+        scope: tokenEntry.scope,
+        sid: tokenEntry.ibToken.sid,
+        sidExp: tokenEntry.sidExpiry
+      },
+      tokenEntry
+    );
+
+    // Store new token mapping with incremented refresh count
     await storageService.storeToken(
       tokens.access_token,
       tokens.refresh_token,

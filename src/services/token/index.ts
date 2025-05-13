@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { TokenEntry } from '../storage';
 
 export interface TokenClaims {
   sub: string;          // Subject (user ID)
@@ -9,6 +10,8 @@ export interface TokenClaims {
   scope?: string;       // OAuth scopes
   email?: string;       // User email
   name?: string;        // User name
+  sid?: string;         // IB Session ID
+  sidExp?: number;      // Session expiry time
 }
 
 export interface TokenResponse {
@@ -22,11 +25,52 @@ export class TokenService {
   private readonly tokenExpiry: number;
   private readonly refreshTokenExpiry: number;
   private readonly isDevelopment: boolean;
+  private readonly maxRefreshCount: number;
 
   constructor() {
     this.tokenExpiry = parseInt(process.env.TOKEN_EXPIRY || '3600', 10);
     this.refreshTokenExpiry = parseInt(process.env.REFRESH_TOKEN_EXPIRY || '2592000', 10);
     this.isDevelopment = process.env.NODE_ENV !== 'production';
+    this.maxRefreshCount = parseInt(process.env.MAX_REFRESH_COUNT || '1000', 10);
+  }
+
+  /**
+   * Check if session needs refresh based on expiry and refresh count
+   */
+  async needsSessionRefresh(tokenEntry: TokenEntry): Promise<boolean> {
+    const now = Math.floor(Date.now() / 1000);
+    
+    // Check if session is expired
+    if (now >= tokenEntry.sidExpiry) {
+      return true;
+    }
+
+    // Check if we're approaching expiry (within 5 minutes)
+    if (tokenEntry.sidExpiry - now < 300) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Validate session refresh attempt
+   */
+  async validateRefreshAttempt(tokenEntry: TokenEntry): Promise<void> {
+    // Check refresh count limit
+    if (tokenEntry.refreshCount >= this.maxRefreshCount) {
+      throw new Error('Maximum refresh attempts exceeded');
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    
+    // Check absolute session timeout
+    const sessionAge = now - tokenEntry.sidCreatedAt;
+    const maxSessionAge = (tokenEntry.ibToken.logintimeoutperiod || 24) * 3600;
+    
+    if (sessionAge >= maxSessionAge) {
+      throw new Error('Session maximum age exceeded');
+    }
   }
 
   /**
@@ -82,9 +126,20 @@ export class TokenService {
   /**
    * Generate new tokens using refresh token
    */
-  async refreshTokens(refreshToken: string, originalClaims: Omit<TokenClaims, 'iss' | 'aud' | 'exp' | 'iat'>): Promise<TokenResponse> {
-    // Note: Validation of refresh token against storage should be done by the caller
-    return this.generateTokens(originalClaims);
+  async refreshTokens(
+    refreshToken: string,
+    originalClaims: Omit<TokenClaims, 'iss' | 'aud' | 'exp' | 'iat'>,
+    tokenEntry: TokenEntry
+  ): Promise<TokenResponse> {
+    // Validate refresh attempt
+    await this.validateRefreshAttempt(tokenEntry);
+
+    // Generate new tokens with updated session info
+    return this.generateTokens({
+      ...originalClaims,
+      sid: tokenEntry.ibToken.sid,
+      sidExp: tokenEntry.sidExpiry
+    });
   }
 
   /**
