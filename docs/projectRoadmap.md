@@ -172,6 +172,10 @@ Week 7-8:
 - Analytics integration
 - Custom error pages
 - Admin interface
+- Standard OAuth redirect support (pending IB implementation)
+  * Remove polling requirement once IB implements OAuth redirects
+  * Simplify client integration flow
+  * Improve authentication user experience
 
 ### 3. Security Enhancements
 - Implement PKCE for enhanced security

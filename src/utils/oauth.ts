@@ -45,12 +45,24 @@ const PlatformUrlSchema = z.string()
   });
 
 // Base authorization request parameter validation schema
+// PKCE code challenge method
+export const CodeChallengeMethod = {
+  S256: 'S256'
+} as const;
+
+// Base authorization request parameter validation schema
 export const BaseAuthorizeParamsSchema = z.object({
   response_type: z.literal(ResponseType.CODE),
   client_id: z.string().min(1),
   redirect_uri: z.string().url(),
   scope: z.string().min(1),
-  state: z.string().optional()
+  state: z.string().optional(),
+  // PKCE parameters
+  code_challenge: z.string()
+    .min(43)
+    .max(128)
+    .regex(/^[A-Za-z0-9\-._~]+$/),
+  code_challenge_method: z.literal(CodeChallengeMethod.S256)
 });
 
 // Full authorization request parameter validation schema
@@ -64,11 +76,17 @@ export const TokenParamsSchema = z.object({
   code: z.string().optional(),
   refresh_token: z.string().optional(),
   redirect_uri: z.string().url().optional(),
-  client_id: z.string().min(1)
+  client_id: z.string().min(1),
+  // PKCE parameter
+  code_verifier: z.string()
+    .min(43)
+    .max(128)
+    .regex(/^[A-Za-z0-9\-._~]+$/)
+    .optional()
 }).refine(data => {
   // Ensure code is present for authorization_code grant
   if (data.grant_type === GrantType.AUTHORIZATION_CODE) {
-    return !!data.code && !!data.redirect_uri;
+    return !!data.code && !!data.redirect_uri && !!data.code_verifier;
   }
   // Ensure refresh_token is present for refresh_token grant
   if (data.grant_type === GrantType.REFRESH_TOKEN) {

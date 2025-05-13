@@ -16,6 +16,8 @@ GET /authorize
 - `redirect_uri` (required): Client's callback URL
 - `scope` (required): OAuth scope (e.g., "profile")
 - `state` (recommended): Random state for CSRF protection
+- `code_challenge` (recommended): PKCE code challenge
+- `code_challenge_method` (recommended): PKCE challenge method (must be "S256")
 
 #### Success Response
 ```html
@@ -102,6 +104,7 @@ Content-Type: application/x-www-form-urlencoded
 - `grant_type` (required): Must be "authorization_code"
 - `code` (required): Authorization code from callback
 - `redirect_uri` (required): Must match authorization request
+- `code_verifier` (required if PKCE used): PKCE code verifier matching the code challenge
 
 #### Success Response
 ```json
@@ -279,8 +282,9 @@ Access-Control-Allow-Headers: Content-Type, Authorization
 
 ## Security Considerations
 
-### 1. CSRF Protection
-- Use state parameter
+### 1. CSRF & Code Interception Protection
+- Use state parameter for CSRF protection
+- Implement PKCE for public clients
 - Validate redirect URIs
 - Check origins
 

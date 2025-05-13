@@ -8,15 +8,44 @@ This guide explains how to integrate with the OAuth service and use the IB API p
 
 ### 1. OAuth Authorization
 ```typescript
-// Redirect user to authorization endpoint
-const authUrl = `https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/authorize
-  ?response_type=code
-  &client_id=${clientId}
-  &redirect_uri=${redirectUri}
-  &scope=profile
-  &state=${state}`;
+// Generate PKCE parameters
+async function generatePKCE() {
+  const buffer = new Uint8Array(32);
+  crypto.getRandomValues(buffer);
+  const codeVerifier = btoa(String.fromCharCode(...buffer))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
 
-window.location.href = authUrl;
+  const encoder = new TextEncoder();
+  const data = encoder.encode(codeVerifier);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  const codeChallenge = btoa(String.fromCharCode(...new Uint8Array(hash)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+
+  return { codeVerifier, codeChallenge };
+}
+
+// Redirect user to authorization endpoint
+async function startAuth() {
+  const { codeVerifier, codeChallenge } = await generatePKCE();
+  
+  // Store code verifier for token exchange
+  sessionStorage.setItem('code_verifier', codeVerifier);
+  
+  const authUrl = `https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/authorize
+    ?response_type=code
+    &client_id=${clientId}
+    &redirect_uri=${redirectUri}
+    &scope=profile
+    &state=${state}
+    &code_challenge=${codeChallenge}
+    &code_challenge_method=S256`;
+
+  window.location.href = authUrl;
+}
 ```
 
 ### 2. Handle Callback
@@ -31,7 +60,8 @@ async function handleCallback(code: string) {
     body: new URLSearchParams({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: redirectUri
+      redirect_uri: redirectUri,
+      code_verifier: sessionStorage.getItem('code_verifier')
     })
   });
 
@@ -252,6 +282,11 @@ try {
 3. Implement proper error handling
 4. Follow OAuth 2.0 security guidelines
 5. Clear tokens on session expiry
+6. Implement PKCE for enhanced security:
+   - Generate secure code verifier
+   - Use SHA-256 for code challenge
+   - Store code verifier securely
+   - Include in token exchange
 
 ### Performance
 1. Reuse API client instance

@@ -14,6 +14,9 @@ export interface StateEntry {
   oauthState?: string;
   createdAt: number;
   expires: number;
+  // PKCE fields
+  codeChallenge?: string;
+  codeChallengeMethod?: string;
 }
 
 export interface TokenEntry {
@@ -48,7 +51,9 @@ export class DynamoDBStorageService {
     ibToken: IBAuthResponse,
     platformUrl: string,
     pollToken?: string,
-    oauthState?: string
+    oauthState?: string,
+    codeChallenge?: string,
+    codeChallengeMethod?: string
   ): Promise<string> {
     const key = pollToken || Math.random().toString(36).substring(2, 15);
     const now = Math.floor(Date.now() / 1000);
@@ -65,7 +70,8 @@ export class DynamoDBStorageService {
         platformUrl,
         oauthState,
         createdAt: now,
-        expires: ttl
+        expires: ttl,
+        ...(codeChallenge && { codeChallenge, codeChallengeMethod })
       }
     });
 

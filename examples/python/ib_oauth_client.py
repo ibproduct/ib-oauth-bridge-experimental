@@ -6,8 +6,10 @@ A Python SDK for the IntelligenceBank OAuth service
 import json
 import time
 import secrets
+import base64
+import hashlib
 import requests
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
@@ -27,6 +29,15 @@ class TokenStorage:
         raise NotImplementedError
 
     def clear_tokens(self) -> None:
+        raise NotImplementedError
+
+    def store_code_verifier(self, verifier: str) -> None:
+        raise NotImplementedError
+
+    def get_code_verifier(self) -> Optional[str]:
+        raise NotImplementedError
+
+    def clear_code_verifier(self) -> None:
         raise NotImplementedError
 
 class FileTokenStorage(TokenStorage):
@@ -50,6 +61,25 @@ class FileTokenStorage(TokenStorage):
         try:
             import os
             os.remove(self.file_path)
+        except FileNotFoundError:
+            pass
+
+    def store_code_verifier(self, verifier: str) -> None:
+        with open(f"{self.file_path}.pkce", 'w') as f:
+            json.dump({'code_verifier': verifier}, f)
+
+    def get_code_verifier(self) -> Optional[str]:
+        try:
+            with open(f"{self.file_path}.pkce", 'r') as f:
+                data = json.load(f)
+                return data.get('code_verifier')
+        except (FileNotFoundError, json.JSONDecodeError):
+            return None
+
+    def clear_code_verifier(self) -> None:
+        try:
+            import os
+            os.remove(f"{self.file_path}.pkce")
         except FileNotFoundError:
             pass
 
@@ -89,7 +119,7 @@ class IBOAuthClient:
         self.storage = storage or FileTokenStorage(".ib_tokens.json")
         self.session = requests.Session()
 
-    def get_auth_url(self, platform_url: Optional[str] = None) -> str:
+    def get_auth_url(self, platform_url: Optional[str] = None, use_pkce: bool = True) -> str:
         """
         Get the authorization URL
         
@@ -106,6 +136,14 @@ class IBOAuthClient:
             'scope': self.config.scope,
             'state': secrets.token_hex(16)
         }
+
+        if use_pkce:
+            code_verifier, code_challenge = self._generate_pkce_params()
+            self.storage.store_code_verifier(code_verifier)
+            params.update({
+                'code_challenge': code_challenge,
+                'code_challenge_method': 'S256'
+            })
         
         if platform_url:
             params['platform_url'] = platform_url
@@ -187,21 +225,43 @@ class IBOAuthClient:
             self._handle_error(e)
             raise
 
+    def _generate_pkce_params(self) -> Tuple[str, str]:
+        """Generate PKCE code verifier and challenge"""
+        # Generate code verifier
+        code_verifier = secrets.token_urlsafe(32)
+
+        # Generate code challenge
+        code_challenge = base64.urlsafe_b64encode(
+            hashlib.sha256(code_verifier.encode('ascii')).digest()
+        ).decode('ascii').rstrip('=')
+
+        return code_verifier, code_challenge
+
     def logout(self) -> None:
         """Clear stored tokens and end the session"""
         self.storage.clear_tokens()
+        self.storage.clear_code_verifier()
         self.session.close()
 
     def _exchange_code(self, code: str) -> Dict[str, Any]:
         """Exchange authorization code for tokens"""
+        data = {
+            'grant_type': 'authorization_code',
+            'code': code,
+            'redirect_uri': self.config.redirect_uri,
+            'client_id': self.config.client_id
+        }
+
+        # Add code verifier if available
+        code_verifier = self.storage.get_code_verifier()
+        if code_verifier:
+            data['code_verifier'] = code_verifier
+            self.storage.clear_code_verifier()
+
         response = self.session.post(
             f"{self.config.base_url}/token",
-            json={
-                'grant_type': 'authorization_code',
-                'code': code,
-                'redirect_uri': self.config.redirect_uri,
-                'client_id': self.config.client_id
-            }
+            data=data,
+            headers={'Content-Type': 'application/x-www-form-urlencoded'}
         )
         response.raise_for_status()
         return response.json()

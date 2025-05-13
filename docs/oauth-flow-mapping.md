@@ -48,6 +48,8 @@ The OAuth flow is implemented using AWS Lambda functions behind API Gateway, wit
     },
     platformUrl: string, // IB platform URL
     oauthState?: string, // Original OAuth state
+    codeChallenge?: string, // PKCE code challenge
+    codeChallengeMethod?: string, // PKCE challenge method
     expires: number      // TTL timestamp
   }
   ```
@@ -63,18 +65,22 @@ The OAuth flow is implemented using AWS Lambda functions behind API Gateway, wit
 
 ### 1. Authorization Flow
 ```
-Client -> /authorize
-  -> Display platform URL form
-  -> User enters platform URL
-  -> Initialize IB login (iframe)
-  -> Poll /authorize/poll
-  -> On success, redirect to client's callback URL
+Client -> Generate PKCE parameters
+  -> Store code_verifier
+  -> Calculate code_challenge
+  -> /authorize with code_challenge
+    -> Display platform URL form
+    -> User enters platform URL
+    -> Initialize IB login (iframe)
+    -> Poll /authorize/poll
+    -> On success, redirect to client's callback URL
 ```
 
 ### 2. Token Exchange Flow
 ```
 Client -> /token
-  -> Validate auth code
+  -> Include code_verifier
+  -> Validate auth code and PKCE
   -> Get session info from state
   -> Generate OAuth tokens
   -> Return tokens + IB session info
@@ -92,6 +98,7 @@ Client -> /token
 ## Security Considerations
 - CORS headers for API Gateway
 - State parameter for CSRF protection
+- PKCE for enhanced authorization security
 - TTL for state entries
 - HTTPS for all endpoints
 - Input validation using Zod

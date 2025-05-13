@@ -12,7 +12,10 @@ This service provides OAuth 2.0 compatibility for IntelligenceBank's Browser Log
        client_id: 'your_client_id',
        redirect_uri: 'https://your-app.com/callback',
        scope: 'profile',
-       state: 'random_state_123'
+       state: 'random_state_123',
+       // PKCE parameters
+       code_challenge: code_challenge,
+       code_challenge_method: 'S256'
      });
    window.location.href = authUrl;
    ```
@@ -36,6 +39,8 @@ This service provides OAuth 2.0 compatibility for IntelligenceBank's Browser Log
 ## Overview
 
 IntelligenceBank is a SaaS platform where each client has their own platform URL. This OAuth bridge service supports dynamic platform URLs, allowing clients to authenticate users against their specific IntelligenceBank instance.
+
+The service implements OAuth 2.0 with PKCE (Proof Key for Code Exchange) support, providing enhanced security for public clients. PKCE prevents authorization code interception attacks and is recommended for all integrations, especially mobile and single-page applications.
 
 ## Authentication Flow
 
@@ -65,17 +70,16 @@ IntelligenceBank is a SaaS platform where each client has their own platform URL
    ```
 
 4. **Exchange Code for Tokens**
-   ```
-   POST /token
-   Content-Type: application/json
+    ```
+    POST /token
+    Content-Type: application/x-www-form-urlencoded
 
-   {
-     "grant_type": "authorization_code",
-     "code": "authorization_code_from_callback",
-     "redirect_uri": "same_as_authorize_request",
-     "client_id": "your_client_id"
-   }
-   ```
+    grant_type=authorization_code
+    &code=authorization_code_from_callback
+    &redirect_uri=same_as_authorize_request
+    &client_id=your_client_id
+    &code_verifier=stored_code_verifier  // Required if PKCE was used
+    ```
 
    Response:
    ```json
@@ -138,7 +142,61 @@ IntelligenceBank is a SaaS platform where each client has their own platform URL
 
 ## Implementation Guide
 
-### 1. Platform URL Handling
+### 1. PKCE Implementation (Recommended)
+
+PKCE (Proof Key for Code Exchange) is recommended for all clients, especially mobile apps and single-page applications:
+
+1. **Generate PKCE Parameters**
+   ```javascript
+   async function generatePKCE() {
+     const buffer = new Uint8Array(32);
+     crypto.getRandomValues(buffer);
+     const codeVerifier = btoa(String.fromCharCode(...buffer))
+       .replace(/\+/g, '-')
+       .replace(/\//g, '_')
+       .replace(/=/g, '');
+
+     const encoder = new TextEncoder();
+     const data = encoder.encode(codeVerifier);
+     const hash = await crypto.subtle.digest('SHA-256', data);
+     const codeChallenge = btoa(String.fromCharCode(...new Uint8Array(hash)))
+       .replace(/\+/g, '-')
+       .replace(/\//g, '_')
+       .replace(/=/g, '');
+
+     return { codeVerifier, codeChallenge };
+   }
+   ```
+
+2. **Use in Authorization Flow**
+   ```javascript
+   // Generate and store PKCE parameters
+   const { codeVerifier, codeChallenge } = await generatePKCE();
+   sessionStorage.setItem('code_verifier', codeVerifier);
+
+   // Add to authorization request
+   const params = new URLSearchParams({
+     // ... other parameters ...
+     code_challenge: codeChallenge,
+     code_challenge_method: 'S256'
+   });
+   ```
+
+3. **Include in Token Exchange**
+   ```javascript
+   const response = await fetch('/token', {
+     method: 'POST',
+     headers: {
+       'Content-Type': 'application/x-www-form-urlencoded'
+     },
+     body: new URLSearchParams({
+       // ... other parameters ...
+       code_verifier: sessionStorage.getItem('code_verifier')
+     })
+   });
+   ```
+
+### 2. Platform URL Handling
 
 The platform URL can be provided in two ways:
 
@@ -153,7 +211,9 @@ b) **User-Provided URL**
 
 ### 2. Authentication Polling
 
-After redirecting to the IntelligenceBank login page, your application should poll the authentication status:
+Note: The polling mechanism is a temporary solution until IntelligenceBank implements standard OAuth redirects. Once implemented, this step will be replaced with the standard OAuth redirect flow, simplifying the integration process.
+
+Currently, after redirecting to the IntelligenceBank login page, your application needs to poll the authentication status:
 
 ```javascript
 async function pollAuthStatus(authCode) {
@@ -346,6 +406,58 @@ This follows OAuth 2.0 best practices where the client is responsible for:
 4. Store tokens securely (e.g., encrypted at rest)
 5. Implement token rotation for refresh tokens
 6. Set appropriate token expiration times
+7. Use PKCE for enhanced security:
+   ```javascript
+   // Generate PKCE parameters
+   async function generatePKCE() {
+     // Generate code verifier
+     const buffer = new Uint8Array(32);
+     crypto.getRandomValues(buffer);
+     const codeVerifier = btoa(String.fromCharCode(...buffer))
+       .replace(/\+/g, '-')
+       .replace(/\//g, '_')
+       .replace(/=/g, '');
+
+     // Generate code challenge
+     const encoder = new TextEncoder();
+     const data = encoder.encode(codeVerifier);
+     const hash = await crypto.subtle.digest('SHA-256', data);
+     const codeChallenge = btoa(String.fromCharCode(...new Uint8Array(hash)))
+       .replace(/\+/g, '-')
+       .replace(/\//g, '_')
+       .replace(/=/g, '');
+
+     return { codeVerifier, codeChallenge };
+   }
+
+   // Use in authorization flow
+   const { codeVerifier, codeChallenge } = await generatePKCE();
+   // Store code_verifier for token exchange
+   sessionStorage.setItem('code_verifier', codeVerifier);
+   // Add code_challenge to authorization request
+   ```
+
+   Token Exchange with PKCE:
+   ```javascript
+   const code = new URLSearchParams(window.location.search).get('code');
+   const codeVerifier = sessionStorage.getItem('code_verifier');
+   
+   const response = await fetch('/token', {
+     method: 'POST',
+     headers: {
+       'Content-Type': 'application/x-www-form-urlencoded'
+     },
+     body: new URLSearchParams({
+       grant_type: 'authorization_code',
+       code: code,
+       redirect_uri: 'your_redirect_uri',
+       client_id: 'your_client_id',
+       code_verifier: codeVerifier
+     })
+   });
+   ```
+
+Note: The current polling-based authentication flow is secure but will be enhanced when IntelligenceBank implements standard OAuth redirects. This will provide a more streamlined and standardized security model.
 
 ## Rate Limiting
 
@@ -367,9 +479,9 @@ X-RateLimit-Reset: 1620000000
 For integration support or issues:
 
 1. **Documentation**
-   - [API Documentation](cline_docs/api-documentation.md)
-   - [Error Codes](cline_docs/api-documentation.md#error-codes)
-   - [Best Practices](cline_docs/api-documentation.md#best-practices)
+   - [API Documentation](docs/api-documentation.md)
+   - [Error Codes](docs/api-documentation.md#error-codes)
+   - [Best Practices](docs/api-documentation.md#best-practices)
 
 2. **Sample Code**
    - [JavaScript SDK](examples/javascript/)

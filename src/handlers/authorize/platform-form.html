@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self'">
     <title>IntelligenceBank OAuth</title>
     <style>
         body {
@@ -190,7 +191,13 @@
             </div>
             <div class="loader" id="login-loader"></div>
             <div class="status" id="status-message">Initializing login...</div>
-            <iframe id="login-frame" frameborder="0" title="IntelligenceBank Login"></iframe>
+            <iframe
+                id="login-frame"
+                frameborder="0"
+                title="IntelligenceBank Login"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                scrolling="yes"
+            ></iframe>
         </div>
     </div>
 

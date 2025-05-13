@@ -64,7 +64,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return handleAuthorizationCode(
         validatedParams.code!,
         validatedParams.redirect_uri!,
-        validatedParams.client_id
+        validatedParams.client_id,
+        validatedParams.code_verifier
       );
     } else {
       return handleRefreshToken(
@@ -100,7 +101,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 async function handleAuthorizationCode(
   code: string,
   redirectUri: string,
-  clientId: string
+  clientId: string,
+  codeVerifier?: string
 ): Promise<APIGatewayProxyResult> {
   try {
     // Get state entry using code as key
@@ -118,6 +120,26 @@ async function handleAuthorizationCode(
         OAuthErrorType.INVALID_REQUEST,
         'client_id or redirect_uri mismatch'
       ));
+    }
+
+    // Validate PKCE code verifier if challenge exists
+    if (stateEntry.codeChallenge) {
+      if (!codeVerifier) {
+        return errorResponse(createOAuthError(
+          OAuthErrorType.INVALID_REQUEST,
+          'code_verifier required'
+        ));
+      }
+
+      // Import validateCodeVerifier from pkce utils
+      const { validateCodeVerifier } = require('../../utils/pkce');
+      
+      if (!validateCodeVerifier(codeVerifier, stateEntry.codeChallenge)) {
+        return errorResponse(createOAuthError(
+          OAuthErrorType.INVALID_REQUEST,
+          'code_verifier validation failed'
+        ));
+      }
     }
 
     // Calculate session expiry from logintimeoutperiod

@@ -171,6 +171,8 @@ const FORM_HTML = `<!DOCTYPE html>
                 <input type="hidden" name="response_type" value="{{response_type}}">
                 <input type="hidden" name="scope" value="{{scope}}">
                 <input type="hidden" name="state" value="{{state}}">
+                <input type="hidden" name="code_challenge" value="{{code_challenge}}">
+                <input type="hidden" name="code_challenge_method" value="{{code_challenge_method}}">
                 
                 <div class="form-group">
                     <label for="platform_url">Platform URL:</label>
@@ -394,7 +396,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // First, escape any template variables in JavaScript strings
     html = html.replace(/\{\{(.*?)\}\}/g, (match, p1) => {
       // If it's one of our OAuth params, replace it
-      if (['client_id', 'redirect_uri', 'response_type', 'scope', 'state'].includes(p1)) {
+      if (['client_id', 'redirect_uri', 'response_type', 'scope', 'state', 'code_challenge', 'code_challenge_method'].includes(p1)) {
         return (params[p1] || '').toString();
       }
       // Otherwise, it's a JavaScript template variable, keep it as is
@@ -432,15 +434,19 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 /**
  * Handle initial login request
  */
+interface StartLoginParams {
+  platform_url: string;
+  client_id: string;
+  redirect_uri: string;
+  state?: string;
+  code_challenge?: string;
+  code_challenge_method?: string;
+}
+
 async function handleStartLogin(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   try {
     // Get parameters from either query string or body
-    let params: {
-      platform_url: string;
-      client_id: string;
-      redirect_uri: string;
-      state?: string;
-    };
+    let params: StartLoginParams;
 
     if (event.httpMethod === 'GET') {
       const queryParams = event.queryStringParameters || {};
@@ -448,7 +454,9 @@ async function handleStartLogin(event: APIGatewayProxyEvent): Promise<APIGateway
         platform_url: queryParams.platform_url || '',
         client_id: queryParams.client_id || '',
         redirect_uri: queryParams.redirect_uri || '',
-        state: queryParams.state
+        state: queryParams.state,
+        code_challenge: queryParams.code_challenge,
+        code_challenge_method: queryParams.code_challenge_method
       };
     } else {
       if (!event.body) {
@@ -494,7 +502,9 @@ async function handleStartLogin(event: APIGatewayProxyEvent): Promise<APIGateway
       ibResponse,
       params.platform_url,
       pollToken, // Use as key
-      params.state // Store original OAuth state
+      params.state, // Store original OAuth state
+      params.code_challenge,
+      params.code_challenge_method
     );
 
     // Generate IB login URL for iframe
@@ -612,7 +622,9 @@ async function handlePollLogin(event: APIGatewayProxyEvent): Promise<APIGatewayP
         },
         stateEntry.platformUrl,
         code, // Use auth code as key for token exchange
-        stateEntry.oauthState
+        stateEntry.oauthState,
+        stateEntry.codeChallenge,
+        stateEntry.codeChallengeMethod
       );
 
       // Delete polling state last, after everything else is ready
