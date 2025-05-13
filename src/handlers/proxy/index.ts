@@ -104,7 +104,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       // Create clean headers for the proxy request
       const headers: Record<string, string> = {
         'sid': tokenEntry.ibToken.sid,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       };
 
       const targetUrl = `https://${path}`;
