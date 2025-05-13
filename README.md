@@ -29,10 +29,38 @@ This service provides OAuth 2.0 compatibility for IntelligenceBank's Browser Log
 
 3. **Make API Requests**
     ```javascript
-    const response = await fetch('https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/users', {
+    // List Users
+    const response = await fetch('https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/clientid/user.limit(100).order(lastUpdateTime:-1)', {
       headers: {
         'Authorization': `Bearer ${tokens.access_token}`
       }
+    });
+
+    // List Resources
+    const resources = await fetch('https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/clientid/resource.limit(100).order(createTime:-1)', {
+      headers: {
+        'Authorization': `Bearer ${tokens.access_token}`
+      }
+    });
+
+    // Create Resource
+    const createResource = await fetch('https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/clientid/resource', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${tokens.access_token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        data: {
+          folder: "folder_id",
+          type: "file",
+          name: "My Resource",
+          description: "Resource description",
+          file: {
+            // File details from upload response
+          }
+        }
+      })
     });
     ```
 
@@ -99,23 +127,30 @@ The service implements OAuth 2.0 with PKCE (Proof Key for Code Exchange) support
 
     Examples:
     ```bash
-    # Get users
-    GET https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/users
+    # List Users
+    GET https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/clientid/user.limit(100).order(lastUpdateTime:-1)
     Authorization: Bearer {access_token}
 
-    # Search assets
-    GET https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/assets/search?query=marketing
+    # List Resources
+    GET https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/clientid/resource.limit(100).order(createTime:-1)
     Authorization: Bearer {access_token}
 
-    # Upload file
-    POST https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/assets/upload
-    Authorization: Bearer {access_token}
-    Content-Type: multipart/form-data
-
-    # Update metadata
-    PATCH https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/assets/123
+    # Create Resource
+    POST https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/clientid/resource
     Authorization: Bearer {access_token}
     Content-Type: application/json
+
+    {
+      "data": {
+        "folder": "folder_id",
+        "type": "file",
+        "name": "My Resource",
+        "description": "Resource description",
+        "file": {
+          // File details from upload response
+        }
+      }
+    }
     ```
 
     Notes:
@@ -501,15 +536,8 @@ For integration support or issues:
    - [Best Practices](docs/api-documentation.md#best-practices)
 
 2. **Sample Code**
-   - [JavaScript SDK](examples/javascript/)
-   - [Python Client](examples/python/)
-   - [Integration Examples](examples/integrations/)
+    - [Python Client](examples/python/ib_oauth_client.py) - Complete Python SDK with PKCE support, token management, and error handling
 
 3. **Support Channels**
    - Open an issue in this repository
    - Contact IntelligenceBank support
-   - Join our developer community
-
-## License
-
-[License information here]
