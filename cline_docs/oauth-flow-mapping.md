@@ -1,125 +1,92 @@
-# OAuth Flow Mapping
+# OAuth Flow Implementation
 
-## Current Implementation
+## Overview
+The OAuth flow is implemented using AWS Lambda functions behind API Gateway, with state management in DynamoDB. The flow supports IntelligenceBank's authentication while maintaining OAuth 2.0 standards.
 
-### 1. Authorization Flow
-```
-GET /authorize
-  ├── No platform_url → Show platform URL form
-  └── With platform_url → Start IB Browser Login
-      ├── Step 1: GET /v1/auth/app/token - Get initial token ✅
-      ├── Step 2: Redirect to /auth/?login=0&token={content} ✅
-      └── Step 3: GET /v1/auth/app/info?token={content} - Poll session status ✅
-```
+## Components
 
-### 2. Token Exchange
-```
-POST /token
-  ├── Validate code & state
-  ├── Validate code & state ✅
-  ├── Return stored session info ✅
-  └── Generate OAuth tokens
-      ├── Access token: dev.{base64(user-info)} ✅
-      └── Refresh token: UUID v4 ✅
-```
+### 1. Authorize Handler (`/authorize`)
+- **Purpose**: Initiates OAuth flow and handles IB login
+- **Implementation**: Lambda function with embedded HTML form
+- **Flow**:
+  1. Validates OAuth parameters
+  2. Displays platform URL form
+  3. Initiates IB login in iframe
+  4. Polls for login completion
+  5. Redirects to client's callback URL with auth code
 
-### 3. Token Service (Not Started ❌)
-```
-- JWT token generation
-- Token validation
-- Refresh token handling
-```
+### 2. Token Handler (`/token`)
+- **Purpose**: Exchanges auth code for tokens
+- **Implementation**: Lambda function
+- **Flow**:
+  1. Validates token request
+  2. Retrieves session info using auth code
+  3. Generates OAuth tokens
+  4. Returns tokens with IB session info
 
-### 4. UserInfo Endpoint (Not Started ❌)
-```
-GET /userinfo
-  ├── Validate access token
-  ├── Extract user info
-  └── Return OAuth claims
-```
+### 3. State Management
+- **Storage**: DynamoDB with TTL
+- **States**:
+  1. Polling state (key: polling token)
+     - Stores IB initial token
+     - Used during login process
+  2. Session state (key: auth code)
+     - Stores IB session info
+     - Used during token exchange
+
+## API Gateway Configuration
+- Base URL: `https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev`
+- Endpoints:
+  - `/authorize`: OAuth authorization endpoint
+  - `/authorize/poll`: Login status polling endpoint
+  - `/token`: Token exchange endpoint
 
 ## Flow Details
 
-### Authorization Flow
-1. Client requests `/authorize` ✅
-   ```
-   GET /authorize?
-     response_type=code
-     &client_id=test-client
-     &redirect_uri=http://localhost:8081/callback
-     &scope=profile
-     &state=random
-   ```
-
-2. Server shows platform URL form if needed ✅
-   ```html
-   <form>
-     <input type="url" name="platform_url" required>
-     <!-- Hidden OAuth params -->
-   </form>
-   ```
-
-3. Server starts IB Browser Login ✅
-   - GET /v1/auth/app/token to get initial token
-   - Store token and platform URL
-   - Redirect to /auth/?login=0&token={content}
-
-4. After IB login ✅
-   - Poll GET /v1/auth/app/info?token={content}
-   - When session is ready, generate authorization code
-   - Redirect to client callback with code and original state
-
-### Token Exchange
-1. Client requests tokens 🔄
-   ```
-   POST /token
-   {
-     grant_type: "authorization_code",
-     code: "auth_code",
-     redirect_uri: "callback_url",
-     client_id: "client_id"
-   }
-   ```
-
-2. Server validates and exchanges code ✅
-   - Validate request parameters
-   - Check authorization code
-   - Generate JWT tokens
-   - Return token response
-
-### Token Response
-```json
-{
-  "access_token": "dev.{base64-encoded-jwt}",
-  "token_type": "Bearer",
-  "expires_in": 3600,
-  "refresh_token": "uuid-v4",
-  "platform_url": "https://company.intelligencebank.com",
-  "client_id": "client-id",
-  "sid": "session-id"  // Important: This is the IB session ID needed for API calls
-}
+### 1. Authorization Flow
+```
+Client -> /authorize
+  -> Display platform URL form
+  -> User enters platform URL
+  -> Initialize IB login (iframe)
+  -> Poll /authorize/poll
+  -> On success, redirect to client's callback URL
 ```
 
-### Session ID Handling
-- The `sid` from successful IB login response is used for API calls
-- Must be passed in lowercase `sid` header when making IB API calls
-- Different from the initial SID received in Step 1 of Browser Login
+### 2. Token Exchange Flow
+```
+Client -> /token
+  -> Validate auth code
+  -> Get session info from state
+  -> Generate OAuth tokens
+  -> Return tokens + IB session info
+```
 
-## Next Steps
-1. ✅ Complete polling implementation
-2. ✅ Add basic token generation
-3. ✅ Add refresh token handling
-4. 🔄 Implement proper JWT token validation
-5. ❌ Build userinfo endpoint
-6. 🔄 Add proper error handling
-7. ❌ Deploy to production server
-8. ❌ Implement database storage
+### 3. State Management
+```
+1. During login:
+   pollToken -> { ibToken, clientId, redirectUri, etc. }
+
+2. After login success:
+   authCode -> { sid, apiV3url, clientid, etc. }
+```
 
 ## Security Considerations
-1. 🔄 Need proper token encryption
-2. ❌ Need secure database storage
-3. 🔄 Need proper error handling
-4. ❌ Need rate limiting
-5. ✅ Basic request validation implemented
-6. ❌ Need proper CORS configuration
-7. ❌ Need SSL/TLS configuration
+- CORS headers for API Gateway
+- State parameter for CSRF protection
+- TTL for state entries
+- HTTPS for all endpoints
+- Input validation using Zod
+
+## Error Handling
+- OAuth 2.0 compliant error responses
+- Proper error propagation
+- Detailed logging for debugging
+- Client-friendly error messages
+
+## Testing
+Use the test client at https://d3p9mz3wmmolll.cloudfront.net/ to verify:
+1. Authorization flow
+2. Token exchange
+3. Error handling
+4. State management

@@ -1,142 +1,100 @@
-# Debug Progress
+# Debugging Progress
 
-## Current Issue
-Form submission not working in dev environment while working fine locally.
+## Common Issues and Solutions
 
-## Environment URLs
-- API Endpoint: https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/
-- Test Client: https://d3p9mz3wmmolll.cloudfront.net
+### 1. IB Token Expiration
+- **Symptom**: 404 error from IB API with "resource has expired"
+- **Cause**: IB tokens have a short lifespan
+- **Solution**: 
+  - Implement token refresh mechanism
+  - Handle expired tokens gracefully
+  - Clear expired state entries
 
-## Testing Setup
-1. Local Development
-   - Express server running on port 3001
-   - Direct server access for testing
-   - All features working correctly
+### 2. State Management
+- **Symptom**: Invalid authorization code errors
+- **Cause**: State entries not found or expired
+- **Solution**:
+  - Verify state storage/retrieval
+  - Check TTL settings
+  - Ensure proper key usage
 
-2. Dev Environment Testing
-   - AWS infrastructure deployed
-   - Test API client hosted on CloudFront
-   - Using IntelligenceBank proxy for API calls
+### 3. API Gateway Integration
+- **Symptom**: CORS or routing issues
+- **Cause**: Misconfigured API Gateway
+- **Solution**:
+  - Verify CORS headers
+  - Check Lambda integrations
+  - Validate endpoint paths
 
-### Symptoms
-1. URL clears after form submission
-2. JavaScript error on line 278 in authorize endpoint: "SyntaxError: Invalid or unexpected token"
-3. Form data not reaching Lambda function
-4. Working perfectly in local development
+## Error Handling Implementation
 
-### Root Cause Identified
-The JavaScript error was caused by template variable handling in the authorize endpoint:
-1. HTML template contained both OAuth parameters (`{{client_id}}`) and JavaScript template literals
-2. Template replacement logic only handled OAuth parameters
-3. Unprocessed template variables in JavaScript code caused syntax errors
-4. This only affected the deployed version because local development used a different template handling approach
+### 1. OAuth Errors
+```typescript
+// Standard OAuth error responses
+{
+  error: 'invalid_request' | 'server_error' | 'authorization_pending',
+  error_description: string
+}
+```
 
-### Environment Differences
-1. Local Development
-   - Express server on port 3001
-   - Direct server access
-   - No CORS issues
-   - Working form submission
+### 2. State Management
+```typescript
+// State entry structure
+{
+  clientId: string,
+  redirectUri: string,
+  scope: string,
+  ibToken?: {
+    sid: string,
+    content: {
+      apiV3url: string,
+      clientid: string
+    }
+  }
+}
+```
 
-2. Dev Environment (AWS)
-   - CloudFront distribution for static content
-   - API Gateway with Lambda proxy integration
-   - Lambda functions for OAuth endpoints
-   - CORS and proxy server integration
-   - CloudWatch logs for debugging
+### 3. Logging Strategy
+- Request details
+- State operations
+- IB API interactions
+- Error conditions
 
-### Recent Changes
-1. ✅ Moved CORS handling to Lambda
-2. ✅ Added detailed error logging
-3. ✅ Fixed IB authentication flow
-4. ✅ Simplified login URL generation
-5. ✅ Added response logging
-6. ✅ Updated Lambda function with changes
+## Testing Procedures
 
-### Environment Differences Found
-1. Local Development (Express Server):
-   - Uses distinct paths: `/authorize/start` for POST
-   - Direct routing without API Gateway
-   - Works with path-based routing
+### 1. Authorization Flow
+```bash
+# Test initial authorization
+curl -X GET "https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/authorize?response_type=code&client_id=test-client&redirect_uri=https://d3p9mz3wmmolll.cloudfront.net/callback&scope=profile"
 
-2. Production (API Gateway):
-   - Uses single path: `/authorize` for both GET/POST
-   - API Gateway maps methods to handlers
-   - Requires matching API Gateway path structure
+# Test polling
+curl -X GET "https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/authorize/poll?token={token}"
+```
 
-### Debug Steps Completed
-1. High Priority
-   - [x] Added detailed client-side logging
-   - [x] Updated CORS headers in Lambda responses
-   - [x] Configured IntelligenceBank proxy
-   - [x] Fixed template variable handling in authorize endpoint
-   - [ ] Test form submission with new changes
-   - [ ] Monitor CloudWatch logs for errors
+### 2. Token Exchange
+```bash
+# Exchange code for tokens
+curl -X POST "https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=authorization_code&code={code}&redirect_uri={redirect_uri}"
+```
 
-### Fix Implementation
-1. Modified template variable handling in authorize endpoint to:
-   - Process OAuth parameters (`{{client_id}}`, etc.)
-   - Preserve JavaScript template literals
-   - Remove any remaining unprocessed template variables
-2. Added better error logging for debugging
+## Monitoring
 
-2. Investigation Areas
-   - [ ] Form submission data flow
-   - [ ] API Gateway request mapping
-   - [ ] Lambda event structure
-   - [ ] CloudWatch logs analysis
+### CloudWatch Metrics
+- Lambda invocations
+- API Gateway requests
+- Error rates
+- Latency
 
-### Working Components
-1. Infrastructure
-   - ✅ CloudFront distribution
-   - ✅ S3 bucket for static hosting
-   - ✅ API Gateway endpoints
-   - ✅ Lambda functions deployed
-   - ✅ DynamoDB tables
-
-2. Functionality
-   - ✅ Static content serving
-   - ✅ HTTPS endpoints
-   - ✅ Basic API responses
-   - ❌ Form submission
-   - ❌ OAuth flow completion
-
-### Debug Tools
-1. AWS Console
-   - CloudWatch Logs
-   - API Gateway Test Console
-   - Lambda Test Events
-   - CloudFront Monitoring
-
-2. Browser Tools
-   - Network Tab
-   - Console Logs
-   - CORS Debugging
-   - Request/Response Inspector
+### Log Groups
+- `/aws/lambda/ib-oauth-authorize-dev`
+- `/aws/lambda/ib-oauth-token-dev`
+- `/aws/lambda/ib-oauth-callback-dev`
 
 ## Next Steps
-1. Next Actions
-   - Test form submission at https://d3p9mz3wmmolll.cloudfront.net
-   - Verify IB authentication flow:
-     1. Initial token request to /v1/auth/app/token
-     2. Login page load with /auth/?login=0&token={{content}}
-     3. Polling /v1/auth/app/info?token={{content}}
-   - Check CloudWatch logs for response data
 
-### Latest Fix
-1. Root Cause: Incorrect IB Authentication Flow
-   - Wrong URL construction for login page
-   - Extra parameters not needed by IB
-   - Missing proper flow sequence
-   
-2. Solution:
-   - Matched exact IB authentication steps
-   - Simplified login URL generation
-   - Added logging for each step
-   - Removed unnecessary parameters
-
-2. If Issues Persist
-   - Test with simplified form
-   - Try direct API Gateway access
-   - Implement step-by-step debugging
-   - Review similar patterns in other projects
+1. Implement token refresh mechanism
+2. Add better error handling for IB API failures
+3. Improve state cleanup for expired entries
+4. Add monitoring alerts for error spikes

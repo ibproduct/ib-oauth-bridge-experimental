@@ -1,258 +1,264 @@
 # Development Workflow
 
-## Initial Setup
+## Environment Setup
 
 ### Prerequisites
-1. Node.js 20.x or later
-2. AWS CLI v2 configured with appropriate credentials
-3. AWS CDK CLI installed globally
-4. Git for version control
-
-### Repository Setup
 ```bash
-# Clone the repository
+# Required tools
+- Node.js 20.x
+- AWS CLI
+- AWS CDK
+- TypeScript
+
+# AWS Configuration
+aws configure
+- Region: us-west-1 (mandatory)
+- Profile: default
+```
+
+### Project Setup
+```bash
+# Clone repository
 git clone <repository-url>
 cd ib-oauth
 
 # Install dependencies
 npm install
 
-# Bootstrap AWS CDK (first time only)
-cdk bootstrap
-
-# Copy environment template
-cp .env.example .env
+# Build project
+npm run build
 ```
-
-### Environment Configuration
-1. Configure `.env` file with required variables (see techStack.md)
-2. Set up AWS credentials with appropriate permissions
-3. Configure IntelligenceBank API credentials
 
 ## Development Process
 
-### Local Development
-1. **Start Local Development**
-   ```bash
-   # Start development server
-   npm run dev
-   
-   # In another terminal, start test client
-   cd tests
-   npx http-server -p 8081
-   ```
-   - Express server on port 3001
-   - Test client on port 8081
-   - In-memory storage for development
-   - Hot reloading with ts-node
-
-2. **Testing Endpoints**
-   - Use test client at http://localhost:8081
-   - Local OAuth server endpoints:
-     * http://localhost:3001/authorize
-     * http://localhost:3001/token
-   - Test IB API integration with proxy server
-   - Verify session handling and token exchange
-
-### Testing
-
-1. **Unit Tests**
-   ```bash
-   # Run unit tests
-   npm run test
-
-   # Run with coverage
-   npm run test:coverage
-   ```
-
-2. **Integration Tests**
-   ```bash
-   # Run integration tests against dev environment
-   npm run test:integration
-   ```
-
-3. **E2E Tests**
-   ```bash
-   # Run end-to-end tests
-   npm run test:e2e
-   ```
-
-### Code Quality
-
-1. **Linting**
-   ```bash
-   # Run ESLint
-   npm run lint
-
-   # Fix auto-fixable issues
-   npm run lint:fix
-   ```
-
-2. **Type Checking**
-   ```bash
-   # Run TypeScript compiler checks
-   npm run type-check
-   ```
-
-3. **Pre-commit Hooks**
-   - Husky configured for:
-     * Lint-staged
-     * Type checking
-     * Unit tests
-     * Commit message format
-
-## AWS Deployment Steps
-
-### 1. Test Client Deployment
+### 1. Local Development
 ```bash
-# Build and deploy test client
-npm run build:cdk && AWS_REGION=us-west-1 STAGE=dev cdk deploy ib-oauth-stack-dev --require-approval never
+# Start development server
+npm run dev
 
-# Verify CloudFront distribution
-aws cloudfront list-distributions --query 'DistributionList.Items[?Comment==`ib-oauth-client-dev`]'
+# Watch for changes
+npm run build -- --watch
+
+# Run tests
+npm test
 ```
 
-### 2. Infrastructure Setup
-```bash
-# Deploy AWS infrastructure
-cdk deploy
+### 2. Lambda Development
 
-# Verify DynamoDB tables
-aws dynamodb list-tables
+#### Function Structure
+```typescript
+// src/handlers/{function}/index.ts
+export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  try {
+    // Handler logic
+  } catch (error) {
+    // Error handling
+  }
+};
 ```
 
-### 2. Production Configuration
-1. Configure AWS Lambda environment
-2. Set up CloudWatch logging
-3. Configure API Gateway endpoints
-4. Set up SSL certificate
-
-### 3. Deployment Process
+#### Building Functions
 ```bash
-# Build and package Lambda functions
-npm run build
+# Build single function
+node scripts/build-lambdas.js authorize
 
-# Deploy to AWS
-npm run deploy
+# Build all functions
+npm run build:lambdas
 ```
 
-### 4. Post-Deployment Verification
-1. Test OAuth flow using CloudFront-hosted test client
-2. Verify CloudWatch logs for all components
-3. Check API Gateway endpoints
-4. Verify CloudFront distribution and S3 bucket
-5. Run integration tests
+#### Testing Functions
+```bash
+# Run function tests
+npm test -- --grep "Authorize Handler"
 
-## Current Monitoring & Debugging
+# Test with coverage
+npm test -- --coverage
+```
 
-### Local Development
-1. Use VS Code debugger with ts-node
-2. Console logging for development
-3. Local test client for development
-4. CloudFront-hosted test client for integration testing
-5. Network tab for API inspection
+### 3. Infrastructure Changes
 
-### Initial Production Monitoring
-1. Application Logs
-   - Winston logger setup
-   - Error tracking
-   - Request/response logging
-   - Performance metrics
+#### CDK Development
+```bash
+# Synthesize stack
+npm run cdk:synth
 
-2. Server Monitoring
-   - PM2 monitoring
-   - Resource utilization
-   - Error rates
-   - Response times
+# Deploy to dev
+npm run cdk:deploy:dev
 
-## Troubleshooting
+# Compare changes
+npm run cdk:diff
+```
 
-### Common Issues & Solutions
+#### API Gateway Changes
+1. Update `cdk/lib/ib-oauth-stack.ts`
+2. Add routes and integrations
+3. Configure CORS if needed
+4. Deploy changes
 
-1. **DynamoDB Issues**
-   - Check AWS credentials
-   - Verify table exists
-   - Check IAM permissions
+### 4. State Management
 
-2. **Lambda Issues**
-   - Check CloudWatch logs
-   - Verify environment variables
-   - Check execution role
-   - Monitor memory usage
+#### DynamoDB Operations
+```typescript
+// Store state
+await storageService.storeState(
+  clientId,
+  redirectUri,
+  scope,
+  sessionInfo,
+  platformUrl,
+  stateKey
+);
 
-3. **API Gateway Issues**
-   - Check endpoint configuration
-   - Verify Lambda integration
-   - Check CloudWatch logs
-   - Test with API Gateway console
+// Retrieve state
+const state = await storageService.getState(stateKey);
 
-### Error Handling
+// Delete state
+await storageService.deleteState(stateKey);
+```
 
-1. **OAuth Errors**
-   - Follow OAuth 2.0 error response format
-   - Log detailed errors internally
-   - Return user-friendly messages
+#### TTL Configuration
+```typescript
+// State entry TTL
+const TTL_MINUTES = {
+  AUTH_CODE: 10,
+  POLL_TOKEN: 5
+};
+```
 
-2. **IB API Errors**
-   - Retry with exponential backoff
-   - Circuit breaker for repeated failures
-   - Fallback mechanisms
+## Testing Process
 
-## Security Practices
+### 1. Unit Testing
+```bash
+# Run unit tests
+npm test
 
-### Credential Management
-1. Use AWS Secrets Manager for sensitive values
-2. Rotate credentials regularly
-3. Use separate credentials per environment
+# Watch mode
+npm test -- --watch
 
-### Code Security
-1. Regular dependency updates
-2. Security scanning in CI/CD
-3. Code review requirements
+# Coverage report
+npm test -- --coverage
+```
 
-### Access Control
-1. IAM roles and policies
-2. API key management
-3. IP allowlisting when required
+### 2. Integration Testing
+```bash
+# Deploy to dev
+npm run cdk:deploy:dev
 
-## Release Process
+# Run integration tests
+npm run test:integration
 
-### Version Management
-1. Semantic versioning
-2. Changelog maintenance
-3. Git tags for releases
+# Test client
+npm run test:client
+```
 
-### Deployment Stages
-1. Development deployment
-2. QA verification
-3. Staging deployment
-4. Production deployment
+### 3. Manual Testing
+1. Use test client at https://d3p9mz3wmmolll.cloudfront.net
+2. Monitor CloudWatch logs
+3. Check DynamoDB state
+4. Verify error handling
 
-### Rollback Procedures
-1. Version rollback process
-2. Data recovery procedures
-3. Incident response plan
+## Deployment Process
+
+### 1. Development
+```bash
+# Deploy to dev
+npm run cdk:deploy:dev
+
+# Verify deployment
+aws cloudformation describe-stacks --stack-name ib-oauth-stack-dev
+```
+
+### 2. Production
+```bash
+# Deploy to prod
+npm run cdk:deploy:prod
+
+# Verify deployment
+aws cloudformation describe-stacks --stack-name ib-oauth-stack-prod
+```
+
+## Monitoring & Debugging
+
+### 1. CloudWatch Logs
+```bash
+# Watch authorize logs
+aws logs tail /aws/lambda/ib-oauth-authorize-dev --follow
+
+# Watch token logs
+aws logs tail /aws/lambda/ib-oauth-token-dev --follow
+```
+
+### 2. DynamoDB Monitoring
+```bash
+# Check table status
+aws dynamodb describe-table --table-name ib-oauth-state-dev
+
+# Scan table
+aws dynamodb scan --table-name ib-oauth-state-dev --limit 10
+```
+
+### 3. API Gateway Testing
+```bash
+# Test authorize endpoint
+curl -v "https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/authorize?response_type=code&client_id=test-client"
+
+# Test token endpoint
+curl -X POST "https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=authorization_code&code=test"
+```
+
+## Error Handling
+
+### 1. OAuth Errors
+```typescript
+// Create OAuth error
+createOAuthError(
+  OAuthErrorType.INVALID_REQUEST,
+  'Invalid request parameters'
+);
+
+// Error response
+{
+  statusCode: 400,
+  body: JSON.stringify({
+    error: 'invalid_request',
+    error_description: 'Invalid request parameters'
+  })
+}
+```
+
+### 2. System Errors
+```typescript
+// Log error
+console.error('Handler error:', error);
+
+// Error response
+{
+  statusCode: 500,
+  body: JSON.stringify({
+    error: 'server_error',
+    error_description: 'Internal server error'
+  })
+}
+```
 
 ## Documentation
 
-### API Documentation
-1. OpenAPI/Swagger specs
-2. Postman collection updates
-3. README maintenance
+### 1. Code Documentation
+- Use JSDoc comments
+- Document interfaces and types
+- Explain complex logic
+- Add usage examples
 
-### Architecture Updates
-1. Update architecture diagrams
-2. Document design decisions
-3. Update security documentation
+### 2. API Documentation
+- Update OpenAPI spec
+- Document endpoints
+- Show request/response examples
+- List error codes
 
-## Support & Maintenance
-
-### Routine Maintenance
-1. Log rotation
-2. Metric cleanup
-3. Database maintenance
-
-### Support Procedures
-1. Issue tracking workflow
-2. Escalation procedures
-3. On-call rotations
+### 3. Architecture Documentation
+- Update flow diagrams
+- Document state management
+- Explain security measures
+- List dependencies

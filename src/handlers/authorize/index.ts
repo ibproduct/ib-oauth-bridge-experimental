@@ -248,12 +248,8 @@ const FORM_HTML = `<!DOCTYPE html>
                     
                     // Start polling and listen for completion message
                     iframe.onload = () => {
+                        // Start polling after iframe loads
                         startPolling(data.token);
-                        
-                        // Listen for completion message from callback page
-                        // Set up message listener before loading iframe
-                        // No need for message event listener since we're redirecting in the same window
-                        showStatus('Login successful! Completing authentication...', 'success');
                     };
                     
                     // Load login page in iframe
@@ -291,9 +287,12 @@ const FORM_HTML = `<!DOCTYPE html>
                     clearInterval(window.pollInterval);
                     
                     if (response.ok && data.redirect_url) {
-                        // Show success and immediately redirect
+                        // Show success and redirect to callback
                         showStatus('Login successful! Redirecting...', 'success');
-                        window.location.href = data.redirect_url;
+                        // Small delay to show success message
+                        setTimeout(() => {
+                            window.location.href = data.redirect_url;
+                        }, 1000);
                     } else {
                         // Show error for non-success responses
                         showError(data.error_description || 'Login failed');
@@ -592,15 +591,14 @@ async function handlePollLogin(event: APIGatewayProxyEvent): Promise<APIGatewayP
 
       // Generate authorization code
       const code = Math.random().toString(36).substring(2, 15);
-
-      // Generate redirect URL first
+      // Generate redirect URL to client's callback URL
       const redirectUrl = generateAuthCodeRedirect(
-        stateEntry.redirectUri,
+        stateEntry.redirectUri, // Client's callback URL
         code,
         stateEntry.oauthState // Use original OAuth state from initial request
       );
 
-      // Store session info with code
+      // Store session info with code for token exchange
       await storageService.storeState(
         stateEntry.clientId,
         stateEntry.redirectUri,
@@ -613,7 +611,7 @@ async function handlePollLogin(event: APIGatewayProxyEvent): Promise<APIGatewayP
           }
         },
         stateEntry.platformUrl,
-        code,
+        code, // Use auth code as key for token exchange
         stateEntry.oauthState
       );
 

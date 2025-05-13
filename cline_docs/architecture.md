@@ -1,128 +1,179 @@
-# IB OAuth Bridge Architecture
+# Architecture Documentation
 
-## Overview
-This architecture proposes an OAuth 2.0 compatible bridge for IntelligenceBank's Browser Login API, allowing standard OAuth clients to authenticate with IB.
+## System Overview
+The OAuth bridge service facilitates authentication between client applications and IntelligenceBank using OAuth 2.0 standards. It handles the complexity of IB's authentication while providing a standard OAuth interface.
 
-## Components
+## Core Components
 
-### 1. AWS API Gateway
-- Exposes OAuth 2.0 standard endpoints:
-  * `/authorize` - Initiates the OAuth flow
-  * `/token` - Exchanges authorization code for tokens
-  * `/userinfo` - Returns user information
+### 1. Lambda Functions
 
-### 2. AWS Lambda Functions
-- **Authorization Handler**
-  * GET /v1/auth/app/token - Get initial token
-  * Redirect to /auth/?login=0&token={content}
-  * Poll GET /v1/auth/app/info?token={content}
-  * Preserve OAuth state through flow
+#### Authorize Handler (`/authorize`)
+- **Purpose**: Manages OAuth authorization flow
+- **Key Features**:
+  - OAuth parameter validation
+  - Platform URL collection
+  - IB login integration via iframe
+  - Login status polling
+  - Auth code generation
+- **State Management**:
+  - Uses polling token for login state
+  - Stores IB session info with auth code
 
-- **Token Handler**
-  * Exchanges authorization code for access token
-  * Validates state parameter
-  * Maps to IB's Step 3 (get session info)
-  * Generates JWT tokens for OAuth clients
+#### Token Handler (`/token`)
+- **Purpose**: Handles OAuth token exchange
+- **Key Features**:
+  - Auth code validation
+  - Token generation
+  - IB session info retrieval
+  - Error handling
+- **Response**:
+  - OAuth tokens
+  - IB session details (apiV3url, clientid, sid)
 
-- **UserInfo Handler**
-  * Returns standardized user profile information
-  * Maps IB session info to OAuth claims
+### 2. API Gateway
+- **Base URL**: `https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev`
+- **Endpoints**:
+  ```
+  GET  /authorize         - Start OAuth flow
+  GET  /authorize/poll    - Check login status
+  POST /token            - Exchange code for tokens
+  ```
+- **Features**:
+  - CORS support
+  - Request validation
+  - Lambda integration
+  - Error handling
 
-### 3. Amazon DynamoDB
-- **State Table**
-  * Stores OAuth state parameters
-  * Maps OAuth states to IB tokens
-  * TTL for automatic cleanup
+### 3. DynamoDB Tables
 
-- **Token Table**
-  * Stores issued access/refresh tokens
-  * Maps tokens to IB sessions
-  * TTL for token expiration
+#### State Table
+- **Purpose**: Manages OAuth and login state
+- **Schema**:
+  ```typescript
+  {
+    state: string (PK),      // Poll token or auth code
+    clientId: string,        // OAuth client ID
+    redirectUri: string,     // Client callback URL
+    scope: string,          // OAuth scope
+    ibToken?: {             // IB session info
+      sid: string,
+      content: {
+        apiV3url: string,
+        clientid: string
+      }
+    },
+    expires: number         // TTL timestamp
+  }
+  ```
 
-## Flow Sequence
+## Authentication Flow
 
 1. **Authorization Request**
    ```
-   GET /authorize?
-     response_type=code&
-     client_id=CLIENT_ID&
-     redirect_uri=CALLBACK_URL&
-     scope=openid profile&
-     state=STATE
+   Client -> /authorize
+   - Validate OAuth params
+   - Display platform URL form
    ```
-   - GET /v1/auth/app/token for initial token
-   - Store state mapping with OAuth state
-   - Redirect to /auth/?login=0&token={content}
-   - Poll GET /v1/auth/app/info?token={content}
 
-2. **Browser Login Flow**
-    ```
-    1. GET /v1/auth/app/token
-    2. /auth/?login=0&token={content}
-    3. GET /v1/auth/app/info?token={content}
-    ```
-    - Get initial token from IB
-    - Redirect user to IB login
-    - Poll session status
-    - Generate authorization code when ready
-
-3. **Token Exchange**
+2. **IB Login**
    ```
-   POST /token
-   grant_type=authorization_code&
-   code=AUTH_CODE&
-   redirect_uri=CALLBACK_URL
+   Browser -> IB Platform
+   - Load login page in iframe
+   - Poll for completion
+   - Store session info
    ```
-   - Lambda validates authorization code
-   - Retrieves IB session from DynamoDB
-   - Issues JWT access token
-   - Returns token response
 
-4. **UserInfo Request**
+3. **Auth Code Generation**
    ```
-   GET /userinfo
-   Authorization: Bearer ACCESS_TOKEN
+   On login success:
+   - Generate auth code
+   - Store session info with code
+   - Redirect to client
    ```
-   - Lambda validates access token
-   - Returns mapped user profile from IB session
 
-## Security Considerations
+4. **Token Exchange**
+   ```
+   Client -> /token
+   - Validate auth code
+   - Get session info
+   - Generate tokens
+   - Return tokens + session info
+   ```
 
-1. **Token Security**
-   - All tokens stored in DynamoDB are encrypted
-   - Short TTL for authorization codes (5 minutes)
-   - Configurable access token expiration
+## Security Measures
 
-2. **HTTPS/TLS**
-   - All endpoints require HTTPS
-   - Modern TLS versions only (1.2+)
+### 1. OAuth Security
+- State parameter for CSRF
+- Short-lived auth codes
+- Secure token generation
+- HTTPS only
 
-3. **CORS**
-   - Configurable CORS policies in API Gateway
-   - Restricted to registered client domains
+### 2. Data Protection
+- DynamoDB encryption
+- TTL for state cleanup
+- Secure session storage
 
-4. **Rate Limiting**
-   - API Gateway throttling rules
-   - Per-client and per-IP limits
+### 3. Access Control
+- API Gateway authorization
+- Lambda IAM roles
+- Resource policies
 
-## Implementation Notes
+## Monitoring & Logging
 
-1. **OAuth Configuration**
-   - Support for multiple client applications
-   - Configurable scopes and claims
-   - Standard OAuth 2.0 error responses
+### CloudWatch Integration
+- Lambda function logs
+- API Gateway metrics
+- Custom error tracking
+- Performance monitoring
 
-2. **IB Integration**
-   - Environment-specific IB platform URLs
-   - Configurable session timeouts
-   - Error handling for IB API responses
+### Log Structure
+```typescript
+{
+  level: 'INFO' | 'ERROR',
+  action: string,
+  details: object,
+  timestamp: string
+}
+```
 
-3. **Monitoring**
-   - CloudWatch metrics and logs
-   - Login success/failure tracking
-   - Token usage analytics
+## Error Handling
 
-4. **Deployment**
-   - Infrastructure as Code (AWS CDK)
-   - Multiple environment support
-   - Blue/green deployments
+### OAuth Errors
+- invalid_request
+- server_error
+- authorization_pending
+
+### System Errors
+- IB API failures
+- State management issues
+- Token validation errors
+
+## Development Setup
+
+### Local Development
+```bash
+# Install dependencies
+npm install
+
+# Build Lambda functions
+npm run build:lambdas
+
+# Deploy to dev
+npm run cdk:deploy:dev
+```
+
+### Testing
+```bash
+# Run tests
+npm test
+
+# Test client
+npm run test:client
+```
+
+## Future Improvements
+1. Token refresh mechanism
+2. Enhanced error handling
+3. Monitoring alerts
+4. Performance optimization
+5. Session management

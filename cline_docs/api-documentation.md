@@ -1,279 +1,214 @@
 # API Documentation
 
-## Overview
-This document describes the OAuth 2.0 bridge service API endpoints for IntelligenceBank authentication.
-
 ## Base URL
-```
-https://{api-id}.execute-api.{region}.amazonaws.com/{stage}
-```
+`https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev`
 
-## Endpoints
+## Authorization Endpoints
 
-### Authorization Endpoint
-Initiates the OAuth 2.0 authorization flow by redirecting the user to the IntelligenceBank login page.
-
-```
+### 1. Start Authorization
+```http
 GET /authorize
 ```
 
 #### Query Parameters
-| Parameter     | Required | Description                                     |
-|--------------|----------|-------------------------------------------------|
-| response_type| Yes      | Must be "code"                                  |
-| client_id    | Yes      | OAuth client identifier                         |
-| redirect_uri | Yes      | OAuth callback URL                              |
-| scope        | Yes      | Requested scope                                 |
-| state        | No       | Client state parameter                          |
+- `response_type` (required): Must be "code"
+- `client_id` (required): OAuth client ID
+- `redirect_uri` (required): Client's callback URL
+- `scope` (required): OAuth scope (e.g., "profile")
+- `state` (recommended): Random state for CSRF protection
 
 #### Success Response
-- **Status Code**: 302 Found
-- **Headers**:
-  ```
-  Location: https://{ib-platform}/auth/?login=0&token={content}
-  ```
-
-#### Error Responses
-
-1. Invalid Parameters
-- **Status Code**: 302 Found
-- **Headers**:
-  ```
-  Location: {redirect_uri}?error=invalid_request&error_description=Invalid request parameters&state={state}
-  ```
-
-2. Server Error
-- **Status Code**: 302 Found
-- **Headers**:
-  ```
-  Location: {redirect_uri}?error=server_error&error_description=Failed to process authorization request&state={state}
-  ```
-
-3. Invalid Request (without redirect_uri)
-- **Status Code**: 400 Bad Request
-- **Body**:
-  ```json
-  {
-    "error": "invalid_request",
-    "error_description": "Invalid request parameters"
-  }
-  ```
-
-#### Example Request
-```
-GET /authorize?response_type=code
-              &client_id=example-client
-              &redirect_uri=https://client.example.com/callback
-              &scope=profile
-              &state=xyz123
+```html
+<!-- Returns HTML form for platform URL input -->
+<!DOCTYPE html>
+<html>
+  <!-- Platform URL form -->
+</html>
 ```
 
-#### Implementation Details
-1. Initial Request:
-   - Validates all OAuth parameters using zod schemas
-   - Shows platform URL form if needed
-
-2. Start Login:
-   - GET /v1/auth/app/token to get initial token
-   - Store state mapping with 10-minute TTL
-   - Return login URL and polling token
-
-3. Browser Login:
-   - Redirect to /auth/?login=0&token={content}
-   - Poll GET /v1/auth/app/info?token={content}
-   - Generate authorization code when session is ready
-
-#### Security Considerations
-- All requests must use HTTPS
-- State parameter is required for CSRF protection
-- DynamoDB entries have TTL for automatic cleanup
-- Request parameters are strictly validated
-- Error responses maintain OAuth 2.0 spec compliance
-
-### Token Endpoint
-Exchange authorization code for access and refresh tokens.
-
-```
-POST /token
-```
-
-#### Request Headers
-```
-Content-Type: application/json
-```
-
-#### Request Body Parameters
-| Parameter     | Required | Description                                     |
-|--------------|----------|-------------------------------------------------|
-| grant_type   | Yes      | "authorization_code" or "refresh_token"         |
-| code         | Yes*     | Authorization code (for authorization_code grant)|
-| refresh_token| Yes*     | Refresh token (for refresh_token grant)         |
-| redirect_uri | Yes*     | Required for authorization_code grant           |
-| client_id    | Yes      | OAuth client identifier                         |
-
-*Parameter requirements depend on grant_type
-
-#### Success Response
-- **Status Code**: 200 OK
-- **Body**:
-  ```json
-  {
-    "access_token": "eyJhbGciOiJSUzI1...",
-    "token_type": "Bearer",
-    "expires_in": 3600,
-    "refresh_token": "8e8620c3-4860-4358..."
-  }
-  ```
-
-#### Error Responses
-
-1. Invalid Request
-- **Status Code**: 400 Bad Request
-- **Body**:
-  ```json
-  {
-    "error": "invalid_request",
-    "error_description": "Invalid request parameters"
-  }
-  ```
-
-2. Invalid Grant
-- **Status Code**: 400 Bad Request
-- **Body**:
-  ```json
-  {
-    "error": "invalid_grant",
-    "error_description": "Invalid or expired authorization code"
-  }
-  ```
-
-3. Server Error
-- **Status Code**: 500 Internal Server Error
-- **Body**:
-  ```json
-  {
-    "error": "server_error",
-    "error_description": "An unexpected error occurred"
-  }
-  ```
-
-#### Example Requests
-
-1. Authorization Code Grant
+#### Error Response
 ```json
-POST /token
 {
-  "grant_type": "authorization_code",
-  "code": "abc123xyz",
-  "redirect_uri": "https://client.example.com/callback",
-  "client_id": "example-client"
+  "error": "invalid_request",
+  "error_description": "Invalid request parameters"
 }
 ```
 
-2. Refresh Token Grant
+### 2. Submit Platform URL
+```http
+GET /authorize
+```
+
+#### Query Parameters
+All parameters from initial request, plus:
+- `platform_url` (required): IntelligenceBank platform URL
+
+#### Success Response
 ```json
-POST /token
 {
-  "grant_type": "refresh_token",
-  "refresh_token": "8e8620c3-4860-4358...",
-  "client_id": "example-client"
+  "loginUrl": "https://company.intelligencebank.com/auth/?login=0&token=xyz",
+  "token": "polling_token_123"
 }
 ```
 
-#### Implementation Details
-- Validates request parameters using zod schemas
-- Supports both authorization_code and refresh_token grants
-- Generates JWT access tokens using RS256 algorithm
-- Stores token mapping in DynamoDB with configurable TTL
-- Implements OAuth 2.0 compliant error responses
-
-#### Security Considerations
-- All requests must use HTTPS
-- JWT tokens are signed using RS256
-- Access tokens have 1-hour expiry by default
-- Refresh tokens have 30-day expiry by default
-- One-time use authorization codes
-- DynamoDB entries have TTL for automatic cleanup
-
-### UserInfo Endpoint
-Retrieve authenticated user's profile information.
-
-```
-GET /userinfo
+#### Error Response
+```json
+{
+  "error": "invalid_request",
+  "error_description": "Invalid platform URL"
+}
 ```
 
-#### Request Headers
+### 3. Poll Login Status
+```http
+GET /authorize/poll
 ```
-Authorization: Bearer {access_token}
+
+#### Query Parameters
+- `token` (required): Polling token from platform URL submission
+
+#### Success Response (Pending)
+```json
+{
+  "error": "authorization_pending",
+  "error_description": "The authorization request is still pending"
+}
 ```
+
+#### Success Response (Complete)
+```json
+{
+  "redirect_url": "https://client.example.com/callback?code=xyz&state=abc"
+}
+```
+
+#### Error Response
+```json
+{
+  "error": "server_error",
+  "error_description": "Failed to check login status"
+}
+```
+
+## Token Endpoint
+
+### Exchange Authorization Code
+```http
+POST /token
+Content-Type: application/x-www-form-urlencoded
+```
+
+#### Request Body
+- `grant_type` (required): Must be "authorization_code"
+- `code` (required): Authorization code from callback
+- `redirect_uri` (required): Must match authorization request
 
 #### Success Response
-- **Status Code**: 200 OK
-- **Body**:
-  ```json
-  {
-    "sub": "user123",
-    "name": "John Doe",
-    "given_name": "John",
-    "family_name": "Doe",
-    "email": "john.doe@example.com",
-    "email_verified": true
-  }
-  ```
-
-#### Error Responses
-
-1. Missing or Invalid Token
-- **Status Code**: 401 Unauthorized
-- **Headers**:
-  ```
-  WWW-Authenticate: Bearer error="invalid_token"
-  ```
-- **Body**:
-  ```json
-  {
-    "error": "Missing or invalid Authorization header"
-  }
-  ```
-
-2. Expired Token
-- **Status Code**: 401 Unauthorized
-- **Headers**:
-  ```
-  WWW-Authenticate: Bearer error="invalid_token"
-  ```
-- **Body**:
-  ```json
-  {
-    "error": "Token expired or invalid"
-  }
-  ```
-
-3. Server Error
-- **Status Code**: 500 Internal Server Error
-- **Body**:
-  ```json
-  {
-    "error": "Internal server error"
-  }
-  ```
-
-#### Example Request
-```
-GET /userinfo
-Authorization: Bearer eyJhbGciOiJSUzI1...
+```json
+{
+  "access_token": "access_token_xyz",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "refresh_token_xyz",
+  "apiV3url": "https://company.intelligencebank.com/api/v3",
+  "clientid": "ib_client_id",
+  "sid": "ib_session_id"
+}
 ```
 
-#### Implementation Details
-- Validates JWT access token
-- Retrieves token mapping from DynamoDB
-- Gets current user session from IntelligenceBank
-- Maps IB profile to standard OAuth claims
-- Implements RFC 6750 error responses
+#### Error Response
+```json
+{
+  "error": "invalid_request",
+  "error_description": "Invalid authorization code"
+}
+```
 
-#### Security Considerations
-- All requests must use HTTPS
-- Bearer token authentication
-- JWT validation with RS256
-- Standard OAuth 2.0 claims mapping
-- Proper WWW-Authenticate headers
+## Error Codes
+
+### OAuth 2.0 Errors
+- `invalid_request`: Missing or invalid parameters
+- `server_error`: Internal server error
+- `authorization_pending`: Login not yet complete
+
+### HTTP Status Codes
+- `200`: Success
+- `302`: Redirect
+- `400`: Bad request
+- `500`: Server error
+
+## CORS Headers
+```http
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET, POST, OPTIONS
+Access-Control-Allow-Headers: Content-Type, Authorization
+```
+
+## State Management
+
+### Authorization State
+- Stored in DynamoDB
+- TTL-based cleanup
+- Indexed by polling token or auth code
+
+### Session Info
+```typescript
+{
+  sid: string,          // IB session ID
+  apiV3url: string,     // IB API URL
+  clientid: string      // IB client ID
+}
+```
+
+## Security Considerations
+
+### 1. CSRF Protection
+- Use state parameter
+- Validate redirect URIs
+- Check origins
+
+### 2. Token Security
+- Short-lived auth codes
+- Secure token storage
+- HTTPS only
+
+### 3. Error Handling
+- Don't leak sensitive info
+- Validate all inputs
+- Rate limiting
+
+## Example Flow
+
+1. Start authorization:
+```http
+GET /authorize
+  ?response_type=code
+  &client_id=test-client
+  &redirect_uri=https://client.example.com/callback
+  &scope=profile
+  &state=random_state_123
+```
+
+2. Submit platform URL:
+```http
+GET /authorize
+  ?platform_url=https://company.intelligencebank.com
+  &client_id=test-client
+  &redirect_uri=https://client.example.com/callback
+  &scope=profile
+  &state=random_state_123
+```
+
+3. Poll login status:
+```http
+GET /authorize/poll?token=polling_token_123
+```
+
+4. Exchange code:
+```http
+POST /token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code
+&code=auth_code_xyz
+&redirect_uri=https://client.example.com/callback

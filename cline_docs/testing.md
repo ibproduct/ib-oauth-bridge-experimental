@@ -1,202 +1,207 @@
 # Testing Documentation
 
-## Current Testing Setup
+## Test Environment
 
-### Manual Testing Environment
-1. Test Client
-   ```
-   URL: http://localhost:8081
-   Purpose: Simulate OAuth client application
-   Features:
-   - OAuth authorization flow
-   - Token exchange
-   - User info retrieval
-   - IB API test call
-   ```
+### API Endpoints
+- Base URL: `https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev`
+- Test Client: `https://d3p9mz3wmmolll.cloudfront.net`
 
-2. OAuth Server
-   ```
-   URL: http://localhost:3001
-   Endpoints:
-   - GET /authorize
-   - POST /token
-   - GET /userinfo
-   ```
+### Test Credentials
+- Client ID: `test-client`
+- Redirect URI: `https://d3p9mz3wmmolll.cloudfront.net/callback`
+- Scope: `profile`
 
-### Test Flow Steps
+## Test Cases
 
-1. Authorization Flow
-   ```
-   ✅ Click "Login with IntelligenceBank"
-   ✅ Enter platform URL
-   ✅ Redirect to IB login
-   🔄 Handle login completion
-   ```
+### 1. Authorization Flow
 
-2. Token Exchange
-   ```
-   🔄 Receive authorization code
-   🔄 Exchange for tokens
-   🔄 Verify token format
-   ```
+#### Initial Authorization
+```bash
+# Test endpoint
+GET /authorize
+?response_type=code
+&client_id=test-client
+&redirect_uri=https://d3p9mz3wmmolll.cloudfront.net/callback
+&scope=profile
+&state={random_state}
 
-3. User Info
-   ```
-   ❌ Send access token
-   ❌ Receive user info
-   ❌ Verify claims
-   ```
+# Expected response
+- 200 OK with HTML form
+- Form contains platform URL input
+```
 
-### Test Cases Needed
+#### Platform URL Submission
+```bash
+# Test endpoint
+GET /authorize
+?platform_url=https://company.intelligencebank.com
+&client_id=test-client
+&redirect_uri=https://d3p9mz3wmmolll.cloudfront.net/callback
+&scope=profile
+&state={random_state}
 
-1. Authorization Endpoint
-   ```
-   - Missing platform URL -> Show form
-   - Invalid platform URL -> Show error
-   - Valid platform URL -> Start IB login
-   - Invalid OAuth params -> Show error
-   ```
+# Expected response
+{
+  "loginUrl": "https://company.intelligencebank.com/auth/?login=0&token={ib_token}",
+  "token": "{poll_token}"
+}
+```
 
-2. Token Endpoint
-   ```
-   - Valid code -> Return tokens
-   - Invalid code -> Error
-   - Missing params -> Error
-   - Expired code -> Error
-   ```
+#### Login Status Polling
+```bash
+# Test endpoint
+GET /authorize/poll?token={poll_token}
 
-3. UserInfo Endpoint
-   ```
-   - Valid token -> Return claims
-   - Invalid token -> Error
-   - Expired token -> Error
-   ```
+# Expected responses
+1. Login pending:
+{
+  "error": "authorization_pending",
+  "error_description": "The authorization request is still pending"
+}
 
-4. Error Cases
-   ```
-   - Network errors
-   - IB API errors
-   - Timeout errors
-   - Validation errors
-   ```
+2. Login success:
+{
+  "redirect_url": "https://d3p9mz3wmmolll.cloudfront.net/callback?code={auth_code}&state={state}"
+}
+```
 
-### Required Test Coverage
+### 2. Token Exchange
 
-1. OAuth Flow
-   ```
-   - Complete authorization flow
-   - Token exchange flow
-   - User info retrieval
-   - Error handling
-   ```
+#### Auth Code Exchange
+```bash
+# Test endpoint
+POST /token
+Content-Type: application/x-www-form-urlencoded
 
-2. IB Integration
-   ```
-   - GET /v1/auth/app/token - Initial token
-   - /auth/?login=0&token={content} - Browser login
-   - GET /v1/auth/app/info?token={content} - Session polling
-   - State preservation through flow
-   ```
+grant_type=authorization_code
+&code={auth_code}
+&redirect_uri=https://d3p9mz3wmmolll.cloudfront.net/callback
 
-3. Token Handling
-   ```
-   - Token generation
-   - Token validation
-   - Token refresh
-   - Token storage
-   ```
+# Expected response
+{
+  "access_token": "{access_token}",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "{refresh_token}",
+  "apiV3url": "https://company.intelligencebank.com/api/v3",
+  "clientid": "{ib_client_id}",
+  "sid": "{ib_session_id}"
+}
+```
 
-4. Security
-   ```
-   - Parameter validation
-   - Token encryption
-   - Error handling
-   - Rate limiting
-   ```
+### 3. Error Cases
 
-### Test Environment Setup
+#### Invalid OAuth Parameters
+```bash
+# Test missing client_id
+GET /authorize?response_type=code
 
-1. Local Development
-   ```bash
-   # Start test client
-   cd tests && node server.js
-   
-   # Start OAuth server
-   cd src && node dev-server.js
-   ```
+# Expected response
+{
+  "error": "invalid_request",
+  "error_description": "Invalid request parameters"
+}
+```
 
-2. Required Test Data
-   ```
-   - Valid platform URL
-   - Test client credentials
-   - Test user account
-   ```
+#### Invalid Platform URL
+```bash
+# Test invalid URL
+GET /authorize?platform_url=invalid-url...
 
-### Current Test Status
+# Expected response
+{
+  "error": "invalid_request",
+  "error_description": "Invalid platform URL"
+}
+```
 
-1. Completed Tests
-   ```
-   ✅ Basic server setup
-   ✅ Platform URL form
-   ✅ IB login redirect
-   ```
+#### Invalid Auth Code
+```bash
+# Test invalid code
+POST /token
+grant_type=authorization_code&code=invalid-code
 
-2. In Progress
-   ```
-   🔄 Token exchange
-   🔄 Session polling
-   🔄 Error handling
-   ```
+# Expected response
+{
+  "error": "invalid_request",
+  "error_description": "Invalid authorization code"
+}
+```
 
-3. Pending Tests
-   ```
-   ❌ Token validation
-   ❌ User info endpoint
-   ❌ Security features
-   ```
+## Integration Testing
 
-### Next Steps
+### Test Client
+1. Open `https://d3p9mz3wmmolll.cloudfront.net`
+2. Click "Login with IntelligenceBank"
+3. Enter platform URL
+4. Complete IB login
+5. Verify redirect with code
+6. Verify token exchange
+7. Check session info
 
-1. Immediate
-   ```
-   - Test GET /v1/auth/app/token response
-   - Test /auth/ redirect with token
-   - Test GET /v1/auth/app/info polling
-   - Verify state preservation
-   ```
+### Automated Tests
+```bash
+# Run all tests
+npm test
 
-2. Short Term
-   ```
-   - Add automated tests
-   - Add token validation tests
-   - Test user info endpoint
-   ```
+# Run specific test suite
+npm test -- --grep "Authorization Flow"
+```
 
-3. Long Term
-   ```
-   - Add security tests
-   - Add performance tests
-   - Add integration tests
-   ```
+## Monitoring Tests
 
-### Test Environment Notes
+### CloudWatch Logs
+```bash
+# Watch authorize logs
+aws logs tail /aws/lambda/ib-oauth-authorize-dev --follow
 
-1. Server Requirements
-   ```
-   - Node.js 20.x
-   - Available ports: 3001, 8081
-   - Network access to IB
-   ```
+# Watch token logs
+aws logs tail /aws/lambda/ib-oauth-token-dev --follow
+```
 
-2. Test Data Management
-   ```
-   - Use in-memory storage
-   - Reset between tests
-   - Mock IB responses when needed
-   ```
+### Metrics to Monitor
+1. Authorization success rate
+2. Token exchange success rate
+3. Error rates by type
+4. API latency
+5. State table operations
 
-3. Known Issues
-   ```
-   - Server startup coordination
-   - Port conflicts
-   - Token persistence
+## Test Data Cleanup
+
+### State Table
+```bash
+# Items are automatically cleaned up by TTL
+# TTL values:
+- Auth codes: 10 minutes
+- Poll tokens: 5 minutes
+```
+
+### Manual Cleanup
+```bash
+# Delete test items
+aws dynamodb delete-item \
+  --table-name ib-oauth-state-dev \
+  --key '{"state": {"S": "test-state"}}'
+```
+
+## Troubleshooting
+
+### Common Issues
+1. CORS errors
+   - Check API Gateway CORS settings
+   - Verify allowed origins
+
+2. State not found
+   - Check TTL expiration
+   - Verify state parameter passing
+
+3. IB API errors
+   - Check token expiration
+   - Verify platform URL
+   - Check IB service status
+
+### Debug Tools
+1. CloudWatch Logs
+2. API Gateway Test Console
+3. DynamoDB Console
+4. Test Client Console

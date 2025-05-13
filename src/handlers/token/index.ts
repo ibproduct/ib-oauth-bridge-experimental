@@ -38,6 +38,12 @@ function successResponse(body: TokenResponse): APIGatewayProxyResult {
 }
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  console.log('Token request:', {
+    body: event.body,
+    headers: event.headers,
+    method: event.httpMethod
+  });
+
   try {
     // Parse and validate request body
     if (!event.body) {
@@ -47,7 +53,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       ));
     }
 
-    const params = JSON.parse(event.body);
+    // Parse form-urlencoded or JSON body
+    // Always parse as form data since that's what OAuth spec requires
+    const params = Object.fromEntries(new URLSearchParams(event.body));
+    console.log('Parsed form data:', params);
     const validatedParams = validateTokenParams(params);
 
     // Handle different grant types
@@ -94,8 +103,14 @@ async function handleAuthorizationCode(
   clientId: string
 ): Promise<APIGatewayProxyResult> {
   try {
-    // Get state entry using code
+    // Get state entry using code as key
     const stateEntry = await storageService.getState(code);
+    console.log('Retrieved state for code:', {
+      code,
+      hasState: !!stateEntry,
+      clientId: stateEntry?.clientId,
+      hasIbToken: !!stateEntry?.ibToken
+    });
 
     // Validate client_id and redirect_uri match stored values
     if (stateEntry.clientId !== clientId || stateEntry.redirectUri !== redirectUri) {
@@ -230,7 +245,10 @@ function errorResponse(error: ReturnType<typeof createOAuthError>): APIGatewayPr
   return {
     statusCode: 400,
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     },
     body: JSON.stringify(error)
   };

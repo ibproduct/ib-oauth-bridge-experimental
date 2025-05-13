@@ -1,329 +1,234 @@
-# Monitoring Strategy
+# Monitoring Documentation
 
-## Overview
-This document outlines the monitoring, logging, and alerting strategy for the IntelligenceBank OAuth bridge service to ensure reliable operation and quick incident response.
+## CloudWatch Setup
 
-## Monitoring Components
-
-### 1. CloudWatch Metrics
-
-#### API Gateway Metrics
-- **Request Counts**
-  * Total requests per endpoint
-  * Success/error rates
-  * Latency percentiles
-
-- **Integration Metrics**
-  * Integration latency
-  * Integration errors
-  * Cache hit/miss rates
-
-#### Lambda Metrics
-- **Execution Metrics**
-  * Invocation count
-  * Duration
-  * Error count
-  * Throttling
-  * Memory usage
-
-- **Concurrent Executions**
-  * Reserved concurrency
-  * Provisioned concurrency
-  * Cold starts
-
-#### DynamoDB Metrics
-- **Throughput**
-  * Read/write capacity units
-  * Throttled requests
-  * Scan/query operations
-
-- **Latency**
-  * Successful request latency
-  * Throttled request latency
-  * System errors
-
-#### CloudFront Metrics
-- **Distribution Performance**
-  * Request count
-  * Error rates
-  * Cache hit/miss ratio
-  * Origin latency
-  * Bytes transferred
-
-- **Edge Performance**
-  * Geographic distribution
-  * SSL/TLS negotiation time
-  * First byte latency
-  * Download time
-
-### 2. Current Debug Focus
-
-#### Form Submission Monitoring
-```typescript
-// Key areas to monitor
-const debugAreas = {
-  formSubmission: {
-    metrics: ['RequestCount', 'ErrorCount'],
-    logs: [
-      'Event object structure',
-      'Query parameters',
-      'Request headers',
-      'CORS headers'
-    ],
-    alerts: ['5xx errors', 'JavaScript errors']
-  }
-};
+### Log Groups
+```
+/aws/lambda/ib-oauth-authorize-dev
+/aws/lambda/ib-oauth-token-dev
+/aws/lambda/ib-oauth-callback-dev
 ```
 
-#### Critical Metrics
-- Form submission attempts
-- JavaScript errors
-- CORS preflight requests
-- Lambda cold starts
-- API Gateway 4xx/5xx errors
-
-#### Integration Points
-- CloudFront to API Gateway
-- API Gateway to Lambda
-- Lambda to DynamoDB
-- Browser to CloudFront
-
-## Logging Strategy
-
-### 1. Structured Logging
-
-#### Log Format
-```json
+### Log Format
+```typescript
 {
-  "timestamp": "2025-05-11T12:20:00Z",
-  "level": "INFO",
-  "event": "token_issued",
-  "requestId": "123abc",
-  "clientId": "client123",
-  "duration": 156,
-  "metadata": {
-    "tokenType": "access",
-    "expiresIn": 3600
+  timestamp: string,
+  requestId: string,
+  level: 'INFO' | 'ERROR',
+  message: string,
+  details: {
+    path: string,
+    method: string,
+    params: object,
+    error?: {
+      type: string,
+      message: string,
+      stack?: string
+    }
   }
 }
 ```
 
-#### Log Levels
-- ERROR: System errors, security issues
-- WARN: Potential issues, degraded service
-- INFO: Normal operations, state changes
-- DEBUG: Detailed debugging information
+## Metrics
 
-#### Log Categories
+### Lambda Metrics
+1. **Invocations**
+   - By function
+   - Success/failure rate
+   - Duration
 
-#### Debug Logs
-- Form submission events
-- Lambda event objects
-- CORS/headers issues
-- JavaScript errors
-- API Gateway integration
+2. **Errors**
+   - Error count
+   - Error rate
+   - Error types
 
-#### Performance Logs
-- CloudFront latency
-- API Gateway latency
-- Lambda execution time
-- DynamoDB operations
+3. **Performance**
+   - Duration p50/p90/p99
+   - Memory usage
+   - Throttling
 
-#### Error Logs
-- JavaScript runtime errors
-- Lambda function errors
-- API Gateway errors
-- CORS violations
+### API Gateway Metrics
+1. **Requests**
+   - Count by endpoint
+   - Success rate
+   - Latency
 
-## Alerting Strategy
+2. **Errors**
+   - 4xx errors
+   - 5xx errors
+   - Integration errors
 
-### 1. Critical Alerts
+3. **Integration**
+   - Latency
+   - Success rate
+   - Timeouts
 
-#### Security Alerts
-```yaml
-# Example CloudWatch alarm
-SecurityViolationAlarm:
-  Type: AWS::CloudWatch::Alarm
-  Properties:
-    MetricName: SecurityViolationCount
-    Namespace: IBOAuth/Security
-    Threshold: 10
-    Period: 300
-    EvaluationPeriods: 1
-    ComparisonOperator: GreaterThanThreshold
-    AlarmActions:
-      - !Ref SecurityAlertTopic
-```
+### DynamoDB Metrics
+1. **Operations**
+   - Read/write capacity
+   - Throttling
+   - Error rate
 
-- Multiple failed authentications
-- Token validation failures
-- Unauthorized access attempts
-- Rate limit breaches
+2. **TTL**
+   - Items deleted
+   - Deletion latency
 
-#### Availability Alerts
-- API endpoint down
-- Lambda errors above threshold
-- DynamoDB throttling
-- Integration failures
+## Alerts
 
-#### Performance Alerts
-- High latency
-- Memory usage
-- Error rate spikes
-- Concurrent execution limits
+### Critical Alerts
+1. **Error Rate**
+   ```
+   Metric: ErrorCount
+   Threshold: > 5% of requests
+   Period: 5 minutes
+   ```
 
-### 2. Warning Alerts
+2. **Latency**
+   ```
+   Metric: Duration p99
+   Threshold: > 5 seconds
+   Period: 5 minutes
+   ```
 
-#### Capacity Alerts
-- Approaching limits
-- Resource utilization
-- Token expiration
-- Cache efficiency
+3. **5xx Errors**
+   ```
+   Metric: 5xxError
+   Threshold: > 1% of requests
+   Period: 1 minute
+   ```
 
-#### Integration Alerts
-- IB API degradation
-- Increased error rates
-- Slow response times
-- Token refresh issues
+### Warning Alerts
+1. **Memory Usage**
+   ```
+   Metric: MemoryUtilization
+   Threshold: > 80%
+   Period: 5 minutes
+   ```
+
+2. **Throttling**
+   ```
+   Metric: ThrottledRequests
+   Threshold: > 0
+   Period: 5 minutes
+   ```
 
 ## Dashboards
 
-### 1. Operational Dashboard
+### Main Dashboard
+1. **Request Overview**
+   - Total requests
+   - Success rate
+   - Error rate
+   - Latency
 
-#### Key Metrics
-- Request volume
-- Error rates
-- Latency
-- Token operations
-- CloudFront metrics
-  * Request volume
-  * Error rates
-  * Cache performance
+2. **Authorization Flow**
+   - Authorization starts
+   - Login completions
+   - Token exchanges
+   - Error breakdown
 
-#### System Health
-- Service status
-- Resource utilization
-- Integration status
-- Alert status
+3. **System Health**
+   - Lambda health
+   - API Gateway health
+   - DynamoDB health
+   - Error trends
 
-### 2. Business Dashboard
+### Error Dashboard
+1. **Error Breakdown**
+   - By type
+   - By endpoint
+   - By time
+   - Top errors
 
-#### Usage Metrics
-- Active users
-- Authentication rate
-- Token issuance
-- API utilization
+2. **Client Errors**
+   - Invalid requests
+   - Missing parameters
+   - Auth failures
 
-#### Client Metrics
-- Per-client usage
-- Error rates
-- Response times
-- Token lifecycle
+3. **System Errors**
+   - IB API errors
+   - Lambda errors
+   - Integration errors
 
-## Incident Response
+## Log Queries
 
-### 1. Alert Response Process
+### Error Analysis
+```
+filter @type = "REPORT"
+| stats
+    count(*) as total,
+    count(@message like /ERROR/) as errors,
+    count(@message like /invalid_request/) as invalid_requests,
+    count(@message like /server_error/) as server_errors
+by bin(5m)
+```
 
-#### Severity Levels
-1. **Critical (P1)**
-   - Service down
-   - Security breach
-   - Data loss
-   - Response: Immediate (24/7)
+### Performance Analysis
+```
+filter @type = "REPORT"
+| stats
+    avg(Duration) as avg_duration,
+    percentile(Duration, 99) as p99_duration,
+    max(Duration) as max_duration
+by FunctionName, bin(5m)
+```
 
-2. **High (P2)**
-   - Degraded service
-   - Performance issues
-   - Integration problems
-   - Response: < 1 hour
+### State Operations
+```
+filter @message like "State"
+| stats
+    count(*) as total,
+    count(@message like /store/) as stores,
+    count(@message like /retrieve/) as retrieves,
+    count(@message like /delete/) as deletes
+by bin(5m)
+```
 
-3. **Medium (P3)**
-   - Minor issues
-   - Non-critical errors
-   - Warning thresholds
-   - Response: < 4 hours
+## Health Checks
 
-4. **Low (P4)**
-   - Routine maintenance
-   - Minor degradation
-   - Optimization needed
-   - Response: Next business day
+### Endpoint Health
+```bash
+# Check authorization endpoint
+curl -I https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/authorize
 
-#### Response Procedures
-1. Alert notification
-2. Initial assessment
-3. Team engagement
-4. Resolution steps
-5. Post-mortem analysis
+# Check token endpoint
+curl -I https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/token
+```
 
-### 2. Runbooks
+### Integration Health
+```bash
+# Test IB API connection
+curl -I https://company.intelligencebank.com/api/v3/health
 
-#### Common Issues
-- Token validation failures
-- Integration timeouts
-- Database throttling
-- Rate limiting
+# Test state storage
+aws dynamodb scan --table-name ib-oauth-state-dev --limit 1
+```
 
-#### Resolution Steps
-- Diagnostic procedures
-- Mitigation steps
-- Verification process
-- Documentation updates
+## Troubleshooting
 
-## Maintenance
+### Common Issues
+1. **IB API Errors**
+   - Check token expiration
+   - Verify platform URL
+   - Check IB service status
 
-### 1. Log Management
+2. **State Issues**
+   - Check TTL settings
+   - Verify key usage
+   - Check DynamoDB capacity
 
-#### Retention Policy
-- CloudWatch Logs: 30 days
-- Security logs: 1 year
-- Performance data: 90 days
-- Business metrics: 1 year
+3. **Integration Issues**
+   - Check Lambda timeouts
+   - Verify IAM permissions
+   - Check API Gateway settings
 
-#### Archival Strategy
-- S3 cold storage
-- Compliance requirements
-- Cost optimization
-- Data analysis needs
+### Debug Commands
+```bash
+# Tail Lambda logs
+aws logs tail /aws/lambda/ib-oauth-authorize-dev --follow
 
-### 2. Metric Management
+# Check API Gateway deployment
+aws apigateway get-deployments --rest-api-id n4h948fv4c
 
-#### Cleanup Procedures
-- Unused metrics
-- Stale alarms
-- Old dashboards
-- Test resources
-
-#### Optimization
-- Sampling rates
-- Retention periods
-- Resolution adjustment
-- Cost analysis
-
-## Compliance
-
-### 1. Audit Logs
-- Authentication events
-- Token operations
-- Configuration changes
-- Access patterns
-
-### 2. Reports
-- Security incidents
-- Performance trends
-- Usage statistics
-- Compliance metrics
-
-## Cost Management
-
-### 1. Monitoring Costs
-- CloudWatch pricing
-- Log storage
-- API calls
-- Custom metrics
-
-### 2. Optimization
-- Log levels
-- Metric resolution
-- Retention periods
-- Resource allocation
+# Test DynamoDB access
+aws dynamodb describe-table --table-name ib-oauth-state-dev

@@ -25,14 +25,6 @@ export class IBOAuthStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY, // For development; change for production
     });
 
-    const codeTable = new dynamodb.Table(this, 'CodeTable', {
-      tableName: `ib-oauth-codes-${props.stage}`,
-      partitionKey: { name: 'code', type: dynamodb.AttributeType.STRING },
-      timeToLiveAttribute: 'expires',
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-
     const tokenTable = new dynamodb.Table(this, 'TokenTable', {
       tableName: `ib-oauth-tokens-${props.stage}`,
       partitionKey: { name: 'accessToken', type: dynamodb.AttributeType.STRING },
@@ -49,6 +41,19 @@ export class IBOAuthStack extends cdk.Stack {
     });
 
     // Lambda Functions
+    const callbackFunction = new lambda.Function(this, 'CallbackFunction', {
+      functionName: `ib-oauth-callback-${props.stage}`,
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset('dist/callback'),
+      environment: {
+        STATE_TABLE: stateTable.tableName,
+        STAGE: props.stage,
+      },
+      memorySize: 256,
+      timeout: cdk.Duration.seconds(10),
+    });
+
     const authorizeFunction = new lambda.Function(this, 'AuthorizeFunction', {
       functionName: `ib-oauth-authorize-${props.stage}`,
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -68,7 +73,7 @@ export class IBOAuthStack extends cdk.Stack {
       handler: 'index.handler',
       code: lambda.Code.fromAsset('dist/token'),
       environment: {
-        CODE_TABLE: codeTable.tableName,
+        STATE_TABLE: stateTable.tableName,
         TOKEN_TABLE: tokenTable.tableName,
         STAGE: props.stage,
       },
@@ -90,8 +95,12 @@ export class IBOAuthStack extends cdk.Stack {
     });
 
     // Grant DynamoDB permissions
+    // State table access
     stateTable.grantReadWriteData(authorizeFunction);
-    codeTable.grantReadWriteData(tokenFunction);
+    stateTable.grantReadWriteData(callbackFunction);
+    stateTable.grantReadWriteData(tokenFunction);  // Token function needs to read state for code exchange
+
+    // Token table access
     tokenTable.grantReadWriteData(tokenFunction);
     tokenTable.grantReadData(userinfoFunction);
 
@@ -108,9 +117,31 @@ export class IBOAuthStack extends cdk.Stack {
       defaultBehavior: {
         origin: new origins.S3Origin(testClientBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+        responseHeadersPolicy: new cloudfront.ResponseHeadersPolicy(this, 'ClientHeadersPolicy', {
+          responseHeadersPolicyName: `client-headers-${props.stage}`,
+          corsBehavior: {
+            accessControlAllowOrigins: ['*'],
+            accessControlAllowMethods: ['GET', 'POST', 'OPTIONS'],
+            accessControlAllowHeaders: ['*'],
+            accessControlAllowCredentials: false,
+            originOverride: true,
+          }
+        })
       },
       defaultRootObject: 'api-test-client.html',
+      errorResponses: [
+        {
+          httpStatus: 403,
+          responseHttpStatus: 200,
+          responsePagePath: '/api-test-client.html'
+        },
+        {
+          httpStatus: 404,
+          responseHttpStatus: 200,
+          responsePagePath: '/api-test-client.html'
+        }
+      ]
     });
 
     // Deploy test client files
@@ -268,30 +299,103 @@ export class IBOAuthStack extends cdk.Stack {
       }]
     });
 
-    const token = api.root.addResource('token');
-    token.addMethod('POST', new apigateway.LambdaIntegration(tokenFunction, {
-      proxy: false,
+    // Add callback endpoint
+    const callback = api.root.addResource('callback');
+    callback.addMethod('GET', new apigateway.LambdaIntegration(callbackFunction, {
+      proxy: true,
       integrationResponses: [{
         statusCode: '200',
         responseParameters: {
-          'method.response.header.Access-Control-Allow-Origin': `'https://${testClientDistribution.distributionDomainName}'`,
-          'method.response.header.Content-Type': 'integration.response.header.Content-Type',
-        },
-        responseTemplates: {
-          'application/json': '$input.body'
+          'method.response.header.Access-Control-Allow-Origin': "'*'",
+          'method.response.header.Access-Control-Allow-Methods': "'GET,OPTIONS'",
+          'method.response.header.Access-Control-Allow-Headers': "'Content-Type,Authorization'",
+          'method.response.header.Content-Type': 'integration.response.header.Content-Type'
         }
-      }],
-      requestTemplates: {
-        'application/json': '{ "statusCode": "200" }',
-      },
+      }]
     }), {
       methodResponses: [{
         statusCode: '200',
         responseParameters: {
           'method.response.header.Access-Control-Allow-Origin': true,
-          'method.response.header.Content-Type': true,
-        },
+          'method.response.header.Access-Control-Allow-Methods': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Content-Type': true
+        }
+      }]
+    });
+
+    // OPTIONS method for callback endpoint CORS
+    callback.addMethod('OPTIONS', new apigateway.MockIntegration({
+      integrationResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': "'*'",
+          'method.response.header.Access-Control-Allow-Methods': "'GET,OPTIONS'",
+          'method.response.header.Access-Control-Allow-Headers': "'Content-Type,Authorization'",
+          'method.response.header.Content-Type': "'application/json'"
+        }
       }],
+      passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
+      requestTemplates: {
+        'application/json': '{"statusCode": 200}'
+      }
+    }), {
+      methodResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Methods': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Content-Type': true
+        }
+      }]
+    });
+
+    const token = api.root.addResource('token');
+    token.addMethod('POST', new apigateway.LambdaIntegration(tokenFunction, {
+      proxy: true,
+      integrationResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': "'*'",
+          'method.response.header.Content-Type': 'integration.response.header.Content-Type'
+        }
+      }]
+    }), {
+      methodResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Content-Type': true
+        }
+      }]
+    });
+
+    // Add OPTIONS method for token endpoint
+    token.addMethod('OPTIONS', new apigateway.MockIntegration({
+      integrationResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': "'*'",
+          'method.response.header.Access-Control-Allow-Methods': "'POST,OPTIONS'",
+          'method.response.header.Access-Control-Allow-Headers': "'Content-Type,Authorization'",
+          'method.response.header.Content-Type': "'application/json'"
+        }
+      }],
+      passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
+      requestTemplates: {
+        'application/json': '{"statusCode": 200}'
+      }
+    }), {
+      methodResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Methods': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Content-Type': true
+        }
+      }]
     });
 
     const userinfo = api.root.addResource('userinfo');
@@ -299,7 +403,7 @@ export class IBOAuthStack extends cdk.Stack {
       integrationResponses: [{
         statusCode: '200',
         responseParameters: {
-          'method.response.header.Access-Control-Allow-Origin': `'https://${testClientDistribution.distributionDomainName}'`,
+          'method.response.header.Access-Control-Allow-Origin': "'*'",
         },
       }],
     }), {

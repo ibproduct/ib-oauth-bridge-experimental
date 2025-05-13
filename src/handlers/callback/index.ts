@@ -1,102 +1,97 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { storageService } from '../../services/storage';
-import { StateEntry } from '../../services/storage/memory';
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  console.log('Callback request:', {
+    path: event.path,
+    method: event.httpMethod,
+    params: event.queryStringParameters
+  });
+
   try {
     const params = event.queryStringParameters || {};
-    const { token } = params;
+    const { code, state } = params;
 
-    if (!token) {
+    if (!code || !state) {
+      console.log('Missing required parameters:', { params });
       return {
         statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        },
         body: JSON.stringify({
           error: 'invalid_request',
-          error_description: 'Missing token parameter'
+          error_description: 'Missing authorization code'
         })
       };
     }
 
-    // Get state entry using token from IB
-    const states = await storageService.getAllStates();
-    const stateEntry = Array.from(states.values()).find(
-      (entry: StateEntry) => entry.ibToken.content === token
-    );
+    try {
+      // Get state entry to get original redirect URI
+      console.log('Retrieving state for code:', code);
+      const stateEntry = await storageService.getState(code);
+      
+      if (!stateEntry) {
+        console.log('State entry not found for code:', code);
+        return {
+          statusCode: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          },
+          body: JSON.stringify({
+            error: 'invalid_request',
+            error_description: 'Invalid authorization code'
+          })
+        };
+      }
 
-    if (!stateEntry) {
+      // Redirect to client's callback URL with code and state
+      console.log('Redirecting to client:', {
+        redirectUri: stateEntry.redirectUri,
+        code,
+        state
+      });
+
+      return {
+        statusCode: 302,
+        headers: {
+          'Location': `${stateEntry.redirectUri}?${new URLSearchParams({
+            code,
+            ...(state && { state })
+          })}`,
+          'Access-Control-Allow-Origin': '*'
+        },
+        body: ''
+      };
+
+    } catch (error) {
+      console.error('Error retrieving state:', error);
       return {
         statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        },
         body: JSON.stringify({
           error: 'invalid_request',
-          error_description: 'Invalid token'
+          error_description: 'Invalid authorization code'
         })
       };
     }
-
-    // Keep the original state entry but update the token
-    await storageService.storeState(
-      stateEntry.clientId,
-      stateEntry.redirectUri,
-      stateEntry.scope,
-      {
-        sid: token,
-        content: token // Use callback token for session info
-      },
-      stateEntry.platformUrl,
-      stateEntry.key, // Keep using original poll token as key
-      stateEntry.oauthState // Keep original OAuth state
-    );
-
-    // Return success page with CORS headers
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'text/html',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-      },
-      body: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Login Complete</title>
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              height: 100vh;
-              margin: 0;
-            }
-            .message {
-              text-align: center;
-              padding: 20px;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="message">
-            <h2>Login Complete</h2>
-            <p>You can close this window and return to the application.</p>
-          </div>
-          <script>
-            // Signal success to parent window
-            window.parent.postMessage('login_complete', '*');
-          </script>
-        </body>
-        </html>
-      `
-    };
 
   } catch (error) {
     console.error('Callback error:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ 
-        error: 'server_error', 
-        error_description: 'Internal server error' 
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      },
+      body: JSON.stringify({
+        error: 'server_error',
+        error_description: 'Internal server error'
       })
     };
   }
