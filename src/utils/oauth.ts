@@ -168,3 +168,18 @@ export function generateAuthCodeRedirect(
 
   return `${redirectUri}?${params.toString()}`;
 }
+
+/**
+ * Extract Bearer token from Authorization header
+ */
+export function extractBearerToken(headers: Record<string, string | undefined>): string | undefined {
+  const authHeader = headers.Authorization || headers.authorization;
+  if (!authHeader) return undefined;
+
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') {
+    return undefined;
+  }
+
+  return parts[1];
+}

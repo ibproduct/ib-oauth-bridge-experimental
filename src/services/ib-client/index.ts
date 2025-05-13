@@ -1,14 +1,13 @@
 import axios, { AxiosInstance } from 'axios';
 
-export interface IBAuthResponse {
+// Response from initial auth token request
+export interface IBInitialAuthResponse {
   sid: string;
-  content: string | {
-    apiV3url: string;
-    clientid: string;
-  };
-  logintimeoutperiod?: number; // Session validity in hours (1-120)
+  content: string;
+  logintimeoutperiod?: number;
 }
 
+// Response from session info request
 export interface IBSessionInfo {
   sid: string;
   content: {
@@ -26,6 +25,13 @@ export interface IBSessionInfo {
       email?: string;
     };
   };
+}
+
+// What we store in the token table
+export interface IBAuthResponse {
+  sid: string;
+  content: string | IBSessionInfo['content'];
+  logintimeoutperiod?: number;
 }
 
 export interface ProxyRequest {
@@ -98,14 +104,30 @@ export class IBClient {
    * Get session information using SID
    */
   async getSessionInfo(platformUrl: string, sid: string): Promise<IBSessionInfo> {
-    this.initializeClient(platformUrl);
     try {
-      if (!this.client) throw new Error('Client not initialized');
-      const response = await this.client.get(`/v1/auth/app/info?token=${sid}`);
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 404) {
+      // Use proxy endpoint for session info request
+      const response = await this.proxyRequest({
+        method: 'GET',
+        url: `${platformUrl}/v1/auth/app/info?token=${sid}`,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        sid
+      });
+
+      if (response.status === 404) {
         throw new Error('Authentication pending');
+      }
+
+      if (response.status !== 200) {
+        throw new Error('Failed to get session information from IntelligenceBank');
+      }
+
+      return response.data as IBSessionInfo;
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Authentication pending') {
+        throw error;
       }
       throw new Error('Failed to get session information from IntelligenceBank');
     }

@@ -43,8 +43,22 @@ The OAuth flow is implemented using AWS Lambda functions behind API Gateway, wit
     redirectUri: string,  // Client's callback URL
     scope: string,       // OAuth scope
     ibToken: {           // IB session info
-      sid?: string,
-      content: any
+      sid: string,
+      content: {         // Complete session info from IB
+        session: {
+          sid: string,
+          userUuid: string,
+          loginTime: number
+        },
+        info: {
+          clientid: string,
+          apiV3url: string,
+          firstname: string,
+          lastname: string,
+          useruuid: string,
+          email?: string
+        }
+      }
     },
     platformUrl: string, // IB platform URL
     oauthState?: string, // Original OAuth state
@@ -60,6 +74,7 @@ The OAuth flow is implemented using AWS Lambda functions behind API Gateway, wit
   - `/authorize`: OAuth authorization endpoint
   - `/authorize/poll`: Login status polling endpoint
   - `/token`: Token exchange endpoint
+  - `/userinfo`: OpenID Connect userinfo endpoint
 
 ## Flow Details
 
@@ -94,6 +109,17 @@ Client -> /token
 2. After login success:
    authCode -> { sid, apiV3url, clientid, etc. }
 ```
+
+### 4. Userinfo Flow
+```
+Client -> /userinfo with Bearer token
+  -> Validate access token
+  -> Get session info from token entry
+  -> Return user profile from stored session info
+```
+
+Note: The userinfo endpoint uses the session information stored during the authorization flow,
+avoiding the need for additional API calls to IntelligenceBank.
 
 ## Security Considerations
 - CORS headers for API Gateway

@@ -144,9 +144,19 @@ interface TokenEntry {
   ibToken: {
     sid: string;
     content: {
-      apiV3url: string;
-      clientid: string;
-      logintimeoutperiod: number; // Session validity in hours (1-120)
+      session: {
+        sid: string;
+        userUuid: string;
+        loginTime: number;
+      };
+      info: {
+        clientid: string;
+        apiV3url: string;
+        firstname: string;
+        lastname: string;
+        useruuid: string;
+        email?: string;
+      };
     };
   };
 
@@ -198,11 +208,12 @@ interface TokenEntry {
    - [x] Validated error responses
    - [x] Implemented monitoring for session events
 
-4. Documentation - 🔄 In Progress
-   - [ ] Update API documentation with new error codes
-   - [ ] Create client integration guide with session handling
-   - [ ] Document error responses and recovery flows
-   - [ ] Add usage examples with session management
+4. Documentation - ✅ Complete
+   - [x] Update API documentation with new error codes
+   - [x] Create client integration guide with session handling
+   - [x] Document error responses and recovery flows
+   - [x] Add usage examples with session management
+   - [x] Document userinfo endpoint implementation
 ## Client Integration Example
 See client-integration.md for detailed examples of:
 - API client setup

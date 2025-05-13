@@ -20,6 +20,11 @@
 
 - **Lambda Functions (Node.js 20.x)**
   * Names: `ib-oauth-{function-name}`
+  * Functions:
+    - authorize: OAuth authorization endpoint
+    - token: Token exchange and refresh
+    - proxy: IB API proxy endpoint
+    - userinfo: OpenID Connect userinfo endpoint
   * TypeScript for type safety
   * AWS SDK v3 for AWS services
   * JWT handling with jose library

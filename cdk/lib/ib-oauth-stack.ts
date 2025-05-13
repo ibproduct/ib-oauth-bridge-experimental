@@ -162,7 +162,7 @@ export class IBOAuthStack extends cdk.Stack {
     // Deploy test client files
     new s3deploy.BucketDeployment(this, 'ClientDeployment', {
       sources: [s3deploy.Source.asset('tests', {
-        exclude: ['test-client.html', 'server.js', 'api-test-server.js']
+        exclude: ['server.js', 'api-test-server.js']
       })],
       destinationBucket: testClientBucket,
       distribution: testClientDistribution,
@@ -415,19 +415,53 @@ export class IBOAuthStack extends cdk.Stack {
 
     const userinfo = api.root.addResource('userinfo');
     userinfo.addMethod('GET', new apigateway.LambdaIntegration(userinfoFunction, {
+      proxy: true,
       integrationResponses: [{
         statusCode: '200',
         responseParameters: {
           'method.response.header.Access-Control-Allow-Origin': "'*'",
-        },
-      }],
+          'method.response.header.Access-Control-Allow-Methods': "'GET,OPTIONS'",
+          'method.response.header.Access-Control-Allow-Headers': "'Content-Type,Authorization'",
+          'method.response.header.Content-Type': 'integration.response.header.Content-Type'
+        }
+      }]
     }), {
       methodResponses: [{
         statusCode: '200',
         responseParameters: {
           'method.response.header.Access-Control-Allow-Origin': true,
-        },
+          'method.response.header.Access-Control-Allow-Methods': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Content-Type': true
+        }
+      }]
+    });
+
+    // Add OPTIONS method for userinfo endpoint CORS
+    userinfo.addMethod('OPTIONS', new apigateway.MockIntegration({
+      integrationResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': "'*'",
+          'method.response.header.Access-Control-Allow-Methods': "'GET,OPTIONS'",
+          'method.response.header.Access-Control-Allow-Headers': "'Content-Type,Authorization'",
+          'method.response.header.Content-Type': "'application/json'"
+        }
       }],
+      passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
+      requestTemplates: {
+        'application/json': '{"statusCode": 200}'
+      }
+    }), {
+      methodResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Methods': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Content-Type': true
+        }
+      }]
     });
 
     // Add proxy endpoint with greedy path parameter

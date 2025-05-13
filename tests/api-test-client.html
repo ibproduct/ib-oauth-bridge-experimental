@@ -57,6 +57,7 @@
         <div>
             <a href="#" class="button" onclick="testIBApi()" id="test-api-button" style="display: none;">Test IB API</a>
             <a href="#" class="button" onclick="testSessionManagement()" id="test-session-button" style="display: none;">Test Session Management</a>
+            <a href="#" class="button" onclick="testUserinfo()" id="test-userinfo-button" style="display: none;">Test Userinfo</a>
         </div>
         <div id="test-api-result" class="result"></div>
     </div>
@@ -212,6 +213,7 @@
                     showCallbackResult('Successfully received tokens:\n' + JSON.stringify(data, null, 2), false);
                     document.getElementById('test-api-button').style.display = 'inline-block';
                     document.getElementById('test-session-button').style.display = 'inline-block';
+                    document.getElementById('test-userinfo-button').style.display = 'inline-block';
                 } else {
                     showCallbackResult('Error:\n' + JSON.stringify(data, null, 2), true);
                 }
@@ -297,6 +299,45 @@
             }
             
             showTestApiResult('Session management test completed', false);
+        }
+
+        // Test userinfo endpoint
+        async function testUserinfo() {
+            const accessToken = sessionStorage.getItem('access_token');
+            if (!accessToken) {
+                showTestApiResult('Error: Missing access token', true);
+                return;
+            }
+
+            try {
+                const response = await fetch(`${apiGatewayUrl}/userinfo`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    if (response.status === 401 && data.error === 'invalid_token') {
+                        // Clear tokens and restart OAuth flow
+                        sessionStorage.clear();
+                        showTestApiResult('Session expired. Please re-authenticate.', true);
+                        document.getElementById('test-api-button').style.display = 'none';
+                        document.getElementById('test-session-button').style.display = 'none';
+                        document.getElementById('test-userinfo-button').style.display = 'none';
+                        return;
+                    }
+                    throw new Error(`Userinfo Error: ${data.error_description || 'Unknown error'}`);
+                }
+
+                logDebug('Userinfo response', data);
+                showTestApiResult('Userinfo Response:\n' + JSON.stringify(data, null, 2), false);
+            } catch (error) {
+                logDebug('Userinfo error', { error: error.message, stack: error.stack });
+                showTestApiResult('Error: ' + error.message, true);
+            }
         }
 
         function showCallbackResult(text, isError = false) {

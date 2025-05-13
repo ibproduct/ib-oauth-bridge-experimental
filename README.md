@@ -133,12 +133,28 @@ The service implements OAuth 2.0 with PKCE (Proof Key for Code Exchange) support
     Response:
     ```json
     {
-      "sub": "user_id",
-      "name": "User Name",
-      "email": "user@example.com",
-      "email_verified": true
+      // Standard OpenID Connect claims
+      "sub": "user_uuid",            // User's unique identifier
+      "name": "John Doe",           // Full name
+      "given_name": "John",         // First name
+      "family_name": "Doe",         // Last name
+      "email": "john@example.com",  // Email (optional)
+      "updated_at": 1683936000,     // Last update timestamp
+
+      // IntelligenceBank-specific claims
+      "ib_client_id": "client123",  // IB client ID
+      "ib_api_url": "https://company.intelligencebank.com/api/v3",
+      "ib_user_uuid": "user123",    // Same as sub
+      "ib_session_id": "session123" // IB session ID
     }
     ```
+
+    Notes:
+    - All user information comes from the successful authentication response
+    - No additional API calls are made to fetch user data
+    - The `email` field is optional and may not be present for all users
+    - The `sub` claim uses the user's UUID as a unique identifier
+    - The `updated_at` timestamp is from the original login time
 
 ## Implementation Guide
 

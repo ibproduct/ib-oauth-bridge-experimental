@@ -70,6 +70,45 @@ async function handleCallback(code: string) {
 }
 ```
 
+## Getting User Information
+
+### Fetch User Profile
+```typescript
+// Get user information using access token
+async function getUserInfo() {
+  const response = await fetch('https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/userinfo', {
+    headers: {
+      'Authorization': `Bearer ${access_token}`
+    }
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    if (error.error === 'invalid_token') {
+      // Handle token errors (see Error Handling section)
+      return;
+    }
+    throw new Error('Failed to fetch user info');
+  }
+
+  const userInfo = await response.json();
+  // userInfo contains:
+  // - sub: User's unique identifier
+  // - name: Full name
+  // - given_name: First name
+  // - family_name: Last name
+  // - email: Optional email address
+  // - updated_at: Last update timestamp
+  // - ib_client_id: IB client ID
+  // - ib_api_url: IB API URL
+  // - ib_user_uuid: Same as sub
+  // - ib_session_id: IB session ID
+  return userInfo;
+}
+```
+
+Note: The userinfo endpoint returns user profile information that was obtained during the authentication flow. No additional API calls to IntelligenceBank are made.
+
 ## Making API Calls
 
 ### API Client Setup

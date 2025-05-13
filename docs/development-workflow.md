@@ -1,5 +1,25 @@
 # Development Workflow
 
+## Test Clients
+
+### Local Development Testing
+- Use `test-client.html` for local development
+- Runs on http://localhost:8081
+- Points to local OAuth server (http://localhost:3001)
+- Basic implementation for quick testing
+
+### Production/Staging Testing
+- Use `api-test-client.html` deployed to CloudFront
+- Points to actual API Gateway endpoints
+- Includes full feature set:
+  * Session management
+  * PKCE support
+  * Userinfo endpoint
+  * Proxy functionality
+  * Error handling
+
+## Development Workflow
+
 ## Environment Setup
 
 ### Prerequisites

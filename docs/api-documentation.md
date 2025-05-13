@@ -162,6 +162,57 @@ Content-Type: application/x-www-form-urlencoded
 }
 ```
 
+## Userinfo Endpoint
+
+### Get User Information
+```http
+GET /userinfo
+Authorization: Bearer <access_token>
+```
+
+#### Headers
+- `Authorization` (required): Bearer token from token endpoint
+
+#### Success Response
+```json
+{
+  // Standard OpenID Connect claims
+  "sub": "user_uuid",            // User's unique identifier
+  "name": "John Doe",           // Full name
+  "given_name": "John",         // First name
+  "family_name": "Doe",         // Last name
+  "email": "john@example.com",  // Email (optional)
+  "updated_at": 1683936000,     // Last update timestamp
+
+  // IntelligenceBank-specific claims
+  "ib_client_id": "client123",  // IB client ID
+  "ib_api_url": "https://company.intelligencebank.com/api/v3",
+  "ib_user_uuid": "user123",    // Same as sub
+  "ib_session_id": "session123" // IB session ID
+}
+```
+
+Notes:
+- All user information comes from the successful authentication response
+- No additional API calls are made to fetch user data
+- The `email` field is optional and may not be present for all users
+- The `sub` claim uses the user's UUID as a unique identifier
+- The `updated_at` timestamp is from the original login time
+
+#### Error Response
+```json
+{
+  "error": "invalid_token",
+  "error_description": "Access token is invalid or has expired"
+}
+```
+
+## Testing
+1. Use the test client at `/api-test-client.html`
+2. Click "Login with IntelligenceBank" to authenticate
+3. After successful authentication, click "Test Userinfo" to verify the endpoint
+4. The response will show all available user information
+
 ## Proxy Endpoint
 
 ### Forward Request to IB API
@@ -193,6 +244,7 @@ Authorization: Bearer <access_token>
   "error_description": "Session has expired"
 }
 ```
+
 
 ## Error Codes
 
@@ -260,10 +312,20 @@ Access-Control-Allow-Headers: Content-Type, Authorization
     scope: string,       // OAuth scope
     ibToken: {           // IB session info
       sid: string,
-      content: {
-        apiV3url: string,
-        clientid: string,
-        logintimeoutperiod: number // Session validity in hours
+      content: {         // Complete session info from IB
+        session: {
+          sid: string,
+          userUuid: string,
+          loginTime: number
+        },
+        info: {
+          clientid: string,
+          apiV3url: string,
+          firstname: string,
+          lastname: string,
+          useruuid: string,
+          email?: string
+        }
       }
     },
     platformUrl: string,  // IB platform URL

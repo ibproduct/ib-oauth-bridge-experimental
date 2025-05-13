@@ -75,13 +75,13 @@
    └── CORS Configuration
    ```
 
-4. User Info
-   ```
-   /userinfo
-   ├── Token Validation ❌
-   ├── User Info Retrieval ❌
-   └── Claims Mapping ❌
-   ```
+4. User Info ✅
+    ```
+    /userinfo
+    ├── Token Validation ✅
+    ├── Session Info Retrieval ✅
+    └── Claims Mapping ✅
+    ```
 
 ### Development Progress
 
@@ -171,6 +171,7 @@
     - OAuth flow with session management
     - Token refresh with configurable limits
     - Proxy integration with IB API
+    - Userinfo endpoint with standard claims
     - Comprehensive error handling
     - CloudWatch monitoring configured
 

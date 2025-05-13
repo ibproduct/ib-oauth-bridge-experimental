@@ -410,6 +410,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       statusCode: 200,
       headers: {
         'Content-Type': 'text/html',
+        'Content-Security-Policy': "frame-ancestors *",
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization'
@@ -615,10 +616,7 @@ async function handlePollLogin(event: APIGatewayProxyEvent): Promise<APIGatewayP
         stateEntry.scope,
         {
           sid: sessionInfo.content.session.sid,
-          content: {
-            apiV3url: sessionInfo.content.info.apiV3url,
-            clientid: sessionInfo.content.info.clientid
-          }
+          content: sessionInfo.content
         },
         stateEntry.platformUrl,
         code, // Use auth code as key for token exchange

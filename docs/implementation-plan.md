@@ -116,10 +116,11 @@ This plan outlines the implementation steps for adding proxy capabilities and en
    - [ ] Load testing
 
 4. Documentation 🔄
-   - [ ] Update API docs with new endpoints
-   - [ ] Create session management guide
-   - [ ] Document error responses
-   - [ ] Add usage examples
+   - [x] Update API docs with new endpoints
+   - [x] Create session management guide
+   - [x] Document error responses
+   - [x] Add usage examples
+   - [x] Document userinfo endpoint
 ## Security Implementation
 
 ### 1. PKCE Support (High Priority)
