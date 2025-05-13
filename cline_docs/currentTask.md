@@ -1,64 +1,194 @@
-# Current Task: Debug Form Submission in Dev Environment
-
-## Testing Environment
-- Local development server: Working perfectly on port 3001
-- Dev environment: Deployed to AWS with test API client
-- Test API client: Hosted on CloudFront for integration testing
+# Current Task: Implement Integrated Proxy and Enhanced Token Management
 
 ## Context
-The OAuth server is working perfectly in local development, and we're now testing the dev environment deployment with a hosted test API client. The form submission issue only appears in the dev environment, not locally.
+The OAuth server needs to be enhanced with an integrated proxy capability for IB API access, along with improved token and session management. The proxy will be implemented as part of our existing OAuth server, leveraging current infrastructure and security measures.
 
 ## Current Status
-- ✅ Local development server (port 3001): Fully functional
-- ✅ Dev environment infrastructure deployed
-- ✅ Test API client hosted on CloudFront
-- ❌ Form submission not working in dev environment
-
-## Active Issues
-1. Form Submission Problem
-   - URL clears after submission
-   - JavaScript error on line 278
-   - Form data not reaching Lambda
-   - CORS configuration being refined
-
-2. Environment Differences
-   - Local: Direct Express server access on port 3001
-   - Dev: CloudFront → API Gateway → Lambda
-   - Test Client: Hosted on CloudFront for consistent testing
-
-## Today's Progress
-1. Infrastructure Updates
-   - Moved CORS handling to Lambda functions
-   - Simplified API Gateway to proxy mode
-   - Added detailed error logging
-   - Updated test client configuration
-
-2. Documentation Updates
-   - Created debug-progress.md for tracking
-   - Updated monitoring.md with debug focus
-   - Refreshed codebaseSummary.md
+- ✅ Basic OAuth flow working
+- ✅ Token exchange implemented
+- ✅ State management functional
+- ✅ Development environment stable
+- ❌ Proxy endpoint needed
+- ❌ Enhanced token management needed
+- ❌ Production environment pending
 
 ## Immediate Tasks
-1. [ ] Debug JavaScript error on line 278
-2. [ ] Add detailed Lambda event logging
-3. [ ] Verify CORS headers in production
-4. [ ] Test form submission data flow
 
-## Next Steps
-1. Once form submission is working:
-   - Set up proper monitoring
-   - Add CloudWatch alarms
-   - Implement user info endpoint
-   - Plan production deployment
+### 1. Proxy Handler Implementation
+```typescript
+// src/handlers/proxy/index.ts
+export const handler: APIGatewayProxyHandler = async (event) => {
+  try {
+    const token = extractBearerToken(event.headers);
+    const tokenEntry = await storageService.getToken(token);
+    const path = event.pathParameters?.proxy;
+    
+    // Validate and refresh if needed
+    if (await needsSidRefresh(tokenEntry)) {
+      await refreshSid(tokenEntry);
+    }
+
+    // Proxy request
+    const response = await ibClient.proxyRequest({
+      method: event.httpMethod,
+      url: `https://${path}`,
+      headers: event.headers,
+      body: event.body,
+      sid: tokenEntry.ibToken.sid
+    });
+
+    return {
+      statusCode: response.status,
+      body: JSON.stringify(response.data),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    };
+  } catch (error) {
+    return handleOAuthError(error);
+  }
+};
+```
+
+### 2. IB Client Enhancement
+```typescript
+// src/services/ib-client/index.ts
+interface ProxyRequest {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  body?: string;
+  sid: string;
+}
+
+export class IBClient {
+  async proxyRequest(request: ProxyRequest): Promise<any> {
+    return this.client.request({
+      method: request.method,
+      url: request.url,
+      headers: {
+        ...request.headers,
+        Authorization: `Bearer ${request.sid}`
+      },
+      data: request.body
+    });
+  }
+}
+```
+
+### 3. Token Management Enhancement
+```typescript
+interface TokenEntry {
+  // Existing fields
+  accessToken: string;
+  refreshToken: string;
+  clientId: string;
+  scope: string;
+  ibToken: {
+    sid: string;
+    content: {
+      apiV3url: string;
+      clientid: string
+    };
+    logintimeoutperiod: number; // Session validity in hours (1-120)
+  };
+  platformUrl: string;
+  
+  // New fields
+  sidExpiry: number;      // Calculated from logintimeoutperiod
+  sidCreatedAt: number;   // When sid was first created
+  refreshCount: number;   // Track refresh attempts
+}
+```
+
+### 4. API Gateway Configuration
+- Add new proxy route:
+  ```
+  /{stage}/proxy/{proxy+}
+  Example: /dev/proxy/company.intelligencebank.com/api/3.0.0/12345/users
+  ```
+- Configure CORS
+- Set up request/response mappings
+- Add rate limiting
+
+## Implementation Steps
+
+1. Token Enhancement
+   - [ ] Update TokenEntry interface
+   - [ ] Implement sid expiry calculation
+   - [ ] Add refresh tracking
+   - [ ] Update token storage service
+
+2. Proxy Implementation
+   - [ ] Create proxy handler
+   - [ ] Enhance IB client service
+   - [ ] Add API Gateway route
+   - [ ] Implement error handling
+
+3. Testing
+   - [ ] Test proxy with various IB API endpoints
+   - [ ] Verify token refresh flow
+   - [ ] Test session expiry handling
+   - [ ] Validate error responses
+
+4. Documentation
+   - [ ] Update API documentation
+   - [ ] Create client integration guide
+   - [ ] Document error responses
+   - [ ] Add usage examples
+
+## Client Integration Example
+```typescript
+// Initialize API client
+const apiClient = axios.create({
+  baseURL: 'https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy',
+  headers: {
+    Authorization: `Bearer ${oauth_token}`
+  }
+});
+
+// Make IB API calls
+const response = await apiClient.get(
+  '/company.intelligencebank.com/api/3.0.0/12345/users'
+);
+```
+
+## Security Considerations
+- Token validation on every request
+- Session expiry enforcement
+- Rate limiting
+- CORS configuration
+- Error handling
+- Audit logging
+
+## Testing Requirements
+1. Proxy functionality
+   - Different HTTP methods
+   - Various IB API endpoints
+   - Request/response handling
+   - Error scenarios
+
+2. Token management
+   - Session timeout handling
+   - Refresh flow
+   - Error cases
+   - Rate limits
+
+3. Integration testing
+   - End-to-end flows
+   - Error handling
+   - Performance testing
+   - Load testing
 
 ## References
-- Debug progress: debug-progress.md
-- Monitoring setup: monitoring.md
-- Project status: codebaseSummary.md
-- API documentation: api-documentation.md
+- Architecture Details: architecture.md
+- Development Guide: development-workflow.md
+- Production Plan: production-deployment.md
+- Project Roadmap: projectRoadmap.md
 
 ## Notes
-- Local testing shows correct behavior
-- AWS infrastructure is properly configured
-- Focus is on debugging client-side issues
-- Need to improve error visibility
+- Proxy integrated with existing OAuth server
+- Leverages current infrastructure
+- Maintains security context
+- Simple client integration
+- Transparent session management

@@ -95,34 +95,61 @@ npm run cdk:diff
 3. Configure CORS if needed
 4. Deploy changes
 
-### 4. State Management
+## Environment Management
 
-#### DynamoDB Operations
-```typescript
-// Store state
-await storageService.storeState(
-  clientId,
-  redirectUri,
-  scope,
-  sessionInfo,
-  platformUrl,
-  stateKey
-);
+### Development Environment
+- Stack name: `ib-oauth-stack-dev`
+- API Gateway stage: `dev`
+- DynamoDB tables: `*-dev`
+- CloudWatch logs: `/aws/lambda/*-dev`
 
-// Retrieve state
-const state = await storageService.getState(stateKey);
+### Production Environment
+- Stack name: `ib-oauth-stack-prod`
+- API Gateway stage: `prod`
+- DynamoDB tables: `*-prod`
+- CloudWatch logs: `/aws/lambda/*-prod`
 
-// Delete state
-await storageService.deleteState(stateKey);
+### Environment Isolation
+1. Separate CloudFormation stacks
+2. Environment-specific resources
+3. Isolated logging
+4. Independent scaling
+
+## Deployment Process
+
+### 1. Development Deployment
+```bash
+# Deploy to dev
+npm run cdk:deploy:dev
+
+# Verify deployment
+aws cloudformation describe-stacks --stack-name ib-oauth-stack-dev
+
+# Test endpoints
+npm run test:integration
 ```
 
-#### TTL Configuration
-```typescript
-// State entry TTL
-const TTL_MINUTES = {
-  AUTH_CODE: 10,
-  POLL_TOKEN: 5
-};
+### 2. Production Deployment
+```bash
+# Pre-deployment checks
+npm run test
+npm run lint
+npm run build
+
+# Deploy to production
+npm run cdk:deploy:prod
+
+# Post-deployment verification
+npm run test:prod
+```
+
+### 3. Rollback Procedures
+```bash
+# Rollback production
+aws cloudformation rollback-stack --stack-name ib-oauth-stack-prod
+
+# Verify rollback
+aws cloudformation describe-stacks --stack-name ib-oauth-stack-prod
 ```
 
 ## Testing Process
@@ -151,96 +178,42 @@ npm run test:integration
 npm run test:client
 ```
 
-### 3. Manual Testing
-1. Use test client at https://d3p9mz3wmmolll.cloudfront.net
-2. Monitor CloudWatch logs
-3. Check DynamoDB state
-4. Verify error handling
-
-## Deployment Process
-
-### 1. Development
+### 3. Production Testing
 ```bash
-# Deploy to dev
-npm run cdk:deploy:dev
+# Run production tests
+npm run test:prod
 
-# Verify deployment
-aws cloudformation describe-stacks --stack-name ib-oauth-stack-dev
-```
-
-### 2. Production
-```bash
-# Deploy to prod
-npm run cdk:deploy:prod
-
-# Verify deployment
-aws cloudformation describe-stacks --stack-name ib-oauth-stack-prod
+# Monitor production metrics
+npm run monitor:prod
 ```
 
 ## Monitoring & Debugging
 
 ### 1. CloudWatch Logs
 ```bash
-# Watch authorize logs
+# Watch dev logs
 aws logs tail /aws/lambda/ib-oauth-authorize-dev --follow
 
-# Watch token logs
-aws logs tail /aws/lambda/ib-oauth-token-dev --follow
+# Watch prod logs
+aws logs tail /aws/lambda/ib-oauth-authorize-prod --follow
 ```
 
-### 2. DynamoDB Monitoring
+### 2. Metrics & Alerts
 ```bash
-# Check table status
-aws dynamodb describe-table --table-name ib-oauth-state-dev
+# View dev metrics
+aws cloudwatch get-metric-data --metric-data-queries file://dev-metrics.json
 
-# Scan table
-aws dynamodb scan --table-name ib-oauth-state-dev --limit 10
+# View prod metrics
+aws cloudwatch get-metric-data --metric-data-queries file://prod-metrics.json
 ```
 
-### 3. API Gateway Testing
+### 3. Health Checks
 ```bash
-# Test authorize endpoint
-curl -v "https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/authorize?response_type=code&client_id=test-client"
+# Check dev endpoints
+curl -v https://dev-api.example.com/health
 
-# Test token endpoint
-curl -X POST "https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/token" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=authorization_code&code=test"
-```
-
-## Error Handling
-
-### 1. OAuth Errors
-```typescript
-// Create OAuth error
-createOAuthError(
-  OAuthErrorType.INVALID_REQUEST,
-  'Invalid request parameters'
-);
-
-// Error response
-{
-  statusCode: 400,
-  body: JSON.stringify({
-    error: 'invalid_request',
-    error_description: 'Invalid request parameters'
-  })
-}
-```
-
-### 2. System Errors
-```typescript
-// Log error
-console.error('Handler error:', error);
-
-// Error response
-{
-  statusCode: 500,
-  body: JSON.stringify({
-    error: 'server_error',
-    error_description: 'Internal server error'
-  })
-}
+# Check prod endpoints
+curl -v https://api.example.com/health
 ```
 
 ## Documentation
@@ -262,3 +235,62 @@ console.error('Handler error:', error);
 - Document state management
 - Explain security measures
 - List dependencies
+
+## Release Process
+
+### 1. Pre-release Checklist
+- [ ] All tests passing
+- [ ] Documentation updated
+- [ ] Security review completed
+- [ ] Performance testing done
+
+### 2. Release Steps
+1. Tag release version
+2. Deploy to production
+3. Run verification tests
+4. Monitor metrics
+5. Update documentation
+
+### 3. Post-release Tasks
+- Monitor error rates
+- Watch performance metrics
+- Check user feedback
+- Document lessons learned
+
+## Security Considerations
+
+### 1. Access Control
+- IAM roles per environment
+- Least privilege principle
+- Regular permission review
+
+### 2. Data Protection
+- Encryption at rest
+- Secure token storage
+- Data retention policies
+
+### 3. Monitoring
+- Security alerts
+- Access logging
+- Audit trail
+- Incident response
+
+## Best Practices
+
+1. Code Quality
+   - Follow style guide
+   - Write tests
+   - Regular reviews
+   - Clean architecture
+
+2. Security
+   - Regular updates
+   - Security scanning
+   - Access control
+   - Audit logging
+
+3. Operations
+   - Automated deployment
+   - Monitoring
+   - Documentation
+   - Backup procedures

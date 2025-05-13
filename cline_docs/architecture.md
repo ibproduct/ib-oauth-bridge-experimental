@@ -23,12 +23,30 @@ The OAuth bridge service facilitates authentication between client applications 
 - **Purpose**: Handles OAuth token exchange
 - **Key Features**:
   - Auth code validation
-  - Token generation
+  - JWT token generation
   - IB session info retrieval
   - Error handling
 - **Response**:
-  - OAuth tokens
+  - OAuth tokens (JWT)
   - IB session details (apiV3url, clientid, sid)
+- **Session Management**:
+  - Tracks IB session timeout (1-120 hours)
+  - Calculates sid expiry from logintimeoutperiod
+  - Manages token refresh based on sid validity
+
+#### API Proxy Handler (`/api/v3/*`)
+- **Purpose**: Proxies requests to IB API
+- **Key Features**:
+  - Bearer token validation
+  - Session management
+  - Automatic token refresh
+  - Error mapping
+- **Flow**:
+  1. Validate Bearer token
+  2. Check token/session expiry
+  3. Refresh if needed
+  4. Proxy to IB API
+  5. Handle errors
 
 ### 2. API Gateway
 - **Base URL**: `https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev`
@@ -37,12 +55,14 @@ The OAuth bridge service facilitates authentication between client applications 
   GET  /authorize         - Start OAuth flow
   GET  /authorize/poll    - Check login status
   POST /token            - Exchange code for tokens
+  *    /api/v3/*        - API proxy endpoints
   ```
 - **Features**:
   - CORS support
   - Request validation
   - Lambda integration
   - Error handling
+  - Rate limiting
 
 ### 3. DynamoDB Tables
 
@@ -55,7 +75,14 @@ The OAuth bridge service facilitates authentication between client applications 
     clientId: string,        // OAuth client ID
     redirectUri: string,     // Client callback URL
     scope: string,          // OAuth scope
-    ibToken: IBAuthResponse, // IB session info
+    ibToken: {              // IB session info
+      sid: string,
+      content: {
+        apiV3url: string,
+        clientid: string
+      },
+      logintimeoutperiod: number // Session validity in hours (1-120)
+    },
     platformUrl: string,    // IB platform URL
     oauthState?: string,    // Original OAuth state
     createdAt: number,      // Creation timestamp
@@ -76,8 +103,18 @@ The OAuth bridge service facilitates authentication between client applications 
     refreshToken: string,     // OAuth refresh token (GSI)
     clientId: string,        // OAuth client ID
     scope: string,          // OAuth scope
-    ibToken: IBAuthResponse, // IB session info
+    ibToken: {              // IB session info
+      sid: string,
+      content: {
+        apiV3url: string,
+        clientid: string
+      },
+      logintimeoutperiod: number // Session validity in hours (1-120)
+    },
     platformUrl: string,    // IB platform URL
+    sidExpiry: number,      // Calculated from logintimeoutperiod
+    sidCreatedAt: number,   // When sid was first created
+    refreshCount: number,   // Number of refreshes
     createdAt: number,      // Creation timestamp
     expires: number         // TTL timestamp
   }
@@ -87,8 +124,10 @@ The OAuth bridge service facilitates authentication between client applications 
   - GSI: refreshToken (for refresh token lookups)
 - **Token Flow**:
   1. Store tokens after successful code exchange
-  2. Update on token refresh
-  3. Automatic cleanup via TTL after expiration
+  2. Calculate sidExpiry from logintimeoutperiod
+  3. Update on token refresh
+  4. Track session expiry
+  5. Automatic cleanup via TTL
 
 ## Authentication Flow
 
@@ -104,7 +143,7 @@ The OAuth bridge service facilitates authentication between client applications 
    Browser -> IB Platform
    - Load login page in iframe
    - Poll for completion
-   - Store session info
+   - Store session info with timeout period
    ```
 
 3. **Auth Code Generation**
@@ -112,6 +151,7 @@ The OAuth bridge service facilitates authentication between client applications 
    On login success:
    - Generate auth code
    - Store session info with code
+   - Store login timeout period
    - Redirect to client
    ```
 
@@ -120,8 +160,18 @@ The OAuth bridge service facilitates authentication between client applications 
    Client -> /token
    - Validate auth code
    - Get session info
-   - Generate tokens
+   - Calculate sid expiry
+   - Generate JWT tokens
    - Return tokens + session info
+   ```
+
+5. **API Access**
+   ```
+   Client -> /api/v3/*
+   - Validate Bearer token
+   - Check token and sid validity
+   - Refresh if needed (based on expiry)
+   - Proxy to IB API
    ```
 
 ## Security Measures
@@ -129,18 +179,24 @@ The OAuth bridge service facilitates authentication between client applications 
 ### 1. OAuth Security
 - State parameter for CSRF
 - Short-lived auth codes
-- Secure token generation
+- JWT token generation
 - HTTPS only
+- Token binding
+- Session timeout enforcement
 
 ### 2. Data Protection
 - DynamoDB encryption
 - TTL for state cleanup
 - Secure session storage
+- Rate limiting
+- Session validity tracking
 
 ### 3. Access Control
 - API Gateway authorization
 - Lambda IAM roles
 - Resource policies
+- Scope enforcement
+- Session timeout enforcement
 
 ## Monitoring & Logging
 
@@ -149,14 +205,23 @@ The OAuth bridge service facilitates authentication between client applications 
 - API Gateway metrics
 - Custom error tracking
 - Performance monitoring
+- Session tracking
+- Timeout monitoring
 
 ### Log Structure
 ```typescript
 {
   level: 'INFO' | 'ERROR',
   action: string,
-  details: object,
-  timestamp: string
+  details: {
+    sessionTimeout?: number,
+    sidExpiry?: number,
+    refreshCount?: number,
+    ...object
+  },
+  timestamp: string,
+  requestId: string,
+  sessionId?: string
 }
 ```
 
@@ -164,13 +229,18 @@ The OAuth bridge service facilitates authentication between client applications 
 
 ### OAuth Errors
 - invalid_request
+- invalid_token
 - server_error
 - authorization_pending
+- insufficient_scope
+- session_expired
 
 ### System Errors
 - IB API failures
 - State management issues
 - Token validation errors
+- Session expiry
+- Refresh limits exceeded
 
 ## Development Setup
 
@@ -195,9 +265,32 @@ npm test
 npm run test:client
 ```
 
+## Production Environment
+
+### Infrastructure
+- Separate CloudFormation stack
+- Production API Gateway
+- Production DynamoDB tables
+- Enhanced monitoring
+- Automated scaling
+
+### Deployment
+- Zero-downtime updates
+- Rollback capability
+- Version control
+- Audit logging
+
+### Monitoring
+- Performance metrics
+- Error tracking
+- Usage analytics
+- Security alerts
+- Session timeout tracking
+
 ## Future Improvements
-1. Token refresh mechanism
-2. Enhanced error handling
-3. Monitoring alerts
-4. Performance optimization
-5. Session management
+1. Enhanced caching
+2. Performance optimization
+3. Advanced monitoring
+4. Automated testing
+5. Disaster recovery
+6. Session management optimization
