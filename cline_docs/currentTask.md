@@ -3,6 +3,8 @@
 ## Context
 The OAuth server needs to be enhanced with an integrated proxy capability for IB API access, along with improved token and session management. The proxy will be implemented as part of our existing OAuth server, leveraging current infrastructure and security measures.
 
+⚠️ IMPORTANT: Review client-integration.md for detailed examples of how clients will interact with the proxy endpoint. This document provides the target client experience we need to support.
+
 ## Current Status
 - ✅ Basic OAuth flow working
 - ✅ Token exchange implemented
@@ -138,20 +140,13 @@ interface TokenEntry {
    - [ ] Add usage examples
 
 ## Client Integration Example
-```typescript
-// Initialize API client
-const apiClient = axios.create({
-  baseURL: 'https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy',
-  headers: {
-    Authorization: `Bearer ${oauth_token}`
-  }
-});
-
-// Make IB API calls
-const response = await apiClient.get(
-  '/company.intelligencebank.com/api/3.0.0/12345/users'
-);
-```
+See client-integration.md for detailed examples of:
+- API client setup
+- Making API calls
+- Error handling
+- Token refresh
+- Best practices
+- Complete client implementation
 
 ## Security Considerations
 - Token validation on every request
@@ -185,10 +180,21 @@ const response = await apiClient.get(
 - Development Guide: development-workflow.md
 - Production Plan: production-deployment.md
 - Project Roadmap: projectRoadmap.md
+- Client Integration: client-integration.md ⚠️ MUST READ
+- Implementation Plan: implementation-plan.md ⚠️ NEW - Detailed steps and tracking
 
 ## Notes
 - Proxy integrated with existing OAuth server
 - Leverages current infrastructure
 - Maintains security context
-- Simple client integration
+- Simple client integration (see client-integration.md)
 - Transparent session management
+- See implementation-plan.md for detailed tracking of implementation progress
+
+## Next Steps
+1. Begin Phase 1: Token Enhancement
+   - Start with TokenEntry interface updates
+   - Implement session timeout handling
+   - Add refresh tracking logic
+
+2. Review implementation-plan.md for complete timeline and details
