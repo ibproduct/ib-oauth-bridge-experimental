@@ -212,12 +212,50 @@ See client-integration.md for detailed examples of:
 - Best practices
 - Complete client implementation
 
-## Security Implementation - ✅ Complete
-- Token validation on every request with proper error handling
+## Security Implementation - 🔄 In Progress
+
+### 1. PKCE Support - ✅ To Be Implemented
+- Independent of IB API limitations
+- Enhances security for public clients
+- Implementation Plan:
+  - Add PKCE code generation in OAuth client
+  - Update authorization endpoint for PKCE validation
+  - Modify token exchange to require code verifier
+  - Update documentation with PKCE examples
+
+### 2. Session Management - ⚠️ Limited by IB API
+- IB API Limitations:
+  - No custom headers for device binding
+  - Session management through /logout endpoint only
+  - Permissions mirror IB platform user permissions
+- Implementation Plan:
+  - Integrate with IB /logout endpoint
+  - Implement local token cleanup
+  - Document session termination process
+  - Add session monitoring
+
+### 3. Token Security - 🔄 Alternative Approach
+Due to IB API constraints:
+- Implement shorter token lifetimes
+- Add frequent token rotation
+- Enhance session monitoring
+- Implement rate limiting
+- Add anomaly detection
+- Document security measures
+
+### 4. Permission Handling - ⚠️ Simplified
+Due to IB platform mirroring:
+- Remove scope validation complexity
+- Document permission inheritance
+- Add error handling for permission denied
+- Update documentation to explain model
+
+### Current Security Features - ✅ Complete
+- Token validation on every request
 - Session expiry enforcement with 5-minute refresh window
 - Configurable refresh attempt limits
 - CORS headers configured for API Gateway
-- Comprehensive error handling with specific error types
+- Comprehensive error handling
 - Audit logging implemented in CloudWatch
 - Rate limiting configured at API Gateway level
 
@@ -258,14 +296,26 @@ See client-integration.md for detailed examples of:
 - 🔄 Documentation updates pending for new features
 
 ## Next Steps
-1. Complete Documentation Updates
-   - Update API documentation with new error codes
-   - Create client integration guide with session handling
-   - Document error responses and recovery flows
-   - Add usage examples with session management
+1. Implement PKCE Support
+   - Add code verifier/challenge generation
+   - Update authorization flow
+   - Add validation in token exchange
+   - Update SDK examples
 
-2. Prepare for Production
+2. Enhance Session Security
+   - Integrate logout endpoint
+   - Implement token rotation
+   - Add session monitoring
+   - Configure rate limiting
+
+3. Update Documentation
+   - Document security model
+   - Add PKCE examples
+   - Explain permission inheritance
+   - Update error handling guide
+
+4. Prepare for Production
    - Review security measures
-   - Set up production monitoring
-   - Configure production rate limits
+   - Set up monitoring
+   - Configure rate limits
    - Plan deployment strategy
