@@ -145,19 +145,54 @@ Access-Control-Allow-Headers: Content-Type, Authorization
 ```
 
 ## State Management
+### DynamoDB Tables
 
-### Authorization State
-- Stored in DynamoDB
-- TTL-based cleanup
-- Indexed by polling token or auth code
+#### State Table (`ib-oauth-state-${stage}`)
+- **Purpose**: Stores authorization state
+- **Schema**:
+  ```typescript
+  {
+    state: string,        // Partition key: polling token or auth code
+    clientId: string,     // OAuth client ID
+    redirectUri: string,  // Client's callback URL
+    scope: string,       // OAuth scope
+    ibToken: {           // IB session info
+      sid: string,       // IB session ID
+      content: {
+        apiV3url: string, // IB API URL
+        clientid: string  // IB client ID
+      }
+    },
+    platformUrl: string, // IB platform URL
+    oauthState?: string, // Original OAuth state
+    expires: number      // TTL timestamp
+  }
+  ```
+- **TTL**:
+  - Polling tokens: 5 minutes
+  - Auth codes: 10 minutes
 
-### Session Info
-```typescript
-{
-  sid: string,          // IB session ID
-  apiV3url: string,     // IB API URL
-  clientid: string      // IB client ID
-}
+#### Token Table (`ib-oauth-tokens-${stage}`)
+- **Purpose**: Stores OAuth tokens
+- **Schema**:
+  ```typescript
+  {
+    accessToken: string,  // Partition key
+    refreshToken: string, // GSI key
+    clientId: string,    // OAuth client ID
+    scope: string,      // OAuth scope
+    ibToken: {          // IB session info
+      sid: string,
+      content: {
+        apiV3url: string,
+        clientid: string
+      }
+    },
+    platformUrl: string, // IB platform URL
+    expires: number     // TTL timestamp
+  }
+  ```
+- **TTL**: 1 hour for access tokens
 ```
 
 ## Security Considerations

@@ -12,11 +12,45 @@
 
 ### 2. State Management
 - **Symptom**: Invalid authorization code errors
-- **Cause**: State entries not found or expired
+- **Cause**: State entries not persisting between Lambda invocations
 - **Solution**:
-  - Verify state storage/retrieval
-  - Check TTL settings
-  - Ensure proper key usage
+  - Implemented DynamoDB storage service
+  - State table with 'state' partition key and TTL
+  - Proper state handling in authorize/token functions
+  - Environment variables and IAM permissions
+
+#### Implementation Details
+- Storage Service:
+  ```typescript
+  // DynamoDB state entry
+  interface StateEntry {
+    state: string;      // Partition key
+    clientId: string;
+    redirectUri: string;
+    scope: string;
+    ibToken: IBAuthResponse;
+    platformUrl: string;
+    oauthState?: string;
+    createdAt: number;
+    expires: number;    // TTL attribute
+  }
+  ```
+
+- State Flow:
+  1. Store initial state with poll token
+  2. Store session info with auth code after successful login
+  3. Clean up state after token exchange
+  4. TTL for automatic cleanup of expired entries
+
+- Environment Configuration:
+  ```typescript
+  // Lambda environment variables
+  environment: {
+    STATE_TABLE: stateTable.tableName,
+    TOKEN_TABLE: tokenTable.tableName,
+    STAGE: props.stage
+  }
+  ```
 
 ### 3. API Gateway Integration
 - **Symptom**: CORS or routing issues

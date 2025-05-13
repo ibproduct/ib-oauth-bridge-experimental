@@ -64,14 +64,28 @@
    - Timeouts
 
 ### DynamoDB Metrics
+
+#### State Table (`ib-oauth-state-${stage}`)
 1. **Operations**
    - Read/write capacity
    - Throttling
    - Error rate
+   - State transitions (poll token → auth code)
 
 2. **TTL**
-   - Items deleted
-   - Deletion latency
+   - Poll tokens (5m expiry)
+   - Auth codes (10m expiry)
+   - Deletion rates
+
+#### Token Table (`ib-oauth-tokens-${stage}`)
+1. **Operations**
+   - Access token lookups
+   - Refresh token lookups (GSI)
+   - Token refresh rate
+
+2. **TTL**
+   - Access token expiry (1h)
+   - Deletion rates
 
 ## Alerts
 
@@ -200,8 +214,11 @@ curl -I https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/token
 # Test IB API connection
 curl -I https://company.intelligencebank.com/api/v3/health
 
-# Test state storage
-aws dynamodb scan --table-name ib-oauth-state-dev --limit 1
+# Test state table
+aws dynamodb scan --table-name ib-oauth-state-${stage} --limit 1
+
+# Test token table
+aws dynamodb scan --table-name ib-oauth-tokens-${stage} --limit 1
 ```
 
 ## Troubleshooting
@@ -212,10 +229,17 @@ aws dynamodb scan --table-name ib-oauth-state-dev --limit 1
    - Verify platform URL
    - Check IB service status
 
-2. **State Issues**
-   - Check TTL settings
-   - Verify key usage
-   - Check DynamoDB capacity
+2. **State Table Issues**
+   - Check TTL settings (5m/10m)
+   - Verify state transitions
+   - Monitor capacity
+   - Check key usage (poll token/auth code)
+
+3. **Token Table Issues**
+   - Check TTL settings (1h)
+   - Monitor GSI performance
+   - Verify token refresh flow
+   - Check capacity
 
 3. **Integration Issues**
    - Check Lambda timeouts

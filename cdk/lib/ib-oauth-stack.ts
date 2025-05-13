@@ -76,6 +76,7 @@ export class IBOAuthStack extends cdk.Stack {
         STATE_TABLE: stateTable.tableName,
         TOKEN_TABLE: tokenTable.tableName,
         STAGE: props.stage,
+        // Note: No CODE_TABLE needed - using state table for auth codes
       },
       memorySize: 256,
       timeout: cdk.Duration.seconds(10),

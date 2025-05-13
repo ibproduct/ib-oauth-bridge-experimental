@@ -25,12 +25,20 @@
   * JWT handling with jose library
   * Axios for HTTP requests
 
-- **DynamoDB**
-  * Names: `ib-oauth-{table-name}`
-  * Single-table design
-  * GSIs for token lookups
-  * TTL for automatic cleanup
-  * On-demand capacity
+- **DynamoDB Tables**
+  * State Table: `ib-oauth-state-{stage}`
+    - Stores OAuth state and login state
+    - Partition key: 'state'
+    - TTL for automatic cleanup
+  * Token Table: `ib-oauth-tokens-{stage}`
+    - Stores access and refresh tokens
+    - Partition key: 'accessToken'
+    - GSI on 'refreshToken'
+    - TTL for automatic cleanup
+  * Common Features:
+    - On-demand capacity
+    - Encryption at rest
+    - Point-in-time recovery
 
 - **CloudFront/S3**
   * Names: `ib-oauth-client-{stage}`

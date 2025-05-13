@@ -25,14 +25,32 @@ The OAuth flow is implemented using AWS Lambda functions behind API Gateway, wit
   4. Returns tokens with IB session info
 
 ### 3. State Management
-- **Storage**: DynamoDB with TTL
+- **Storage**: DynamoDB state table (`ib-oauth-state-${stage}`)
 - **States**:
-  1. Polling state (key: polling token)
+  1. Polling state (state = polling token)
      - Stores IB initial token
      - Used during login process
-  2. Session state (key: auth code)
+     - TTL: 5 minutes
+  2. Session state (state = auth code)
      - Stores IB session info
      - Used during token exchange
+     - TTL: 10 minutes
+- **Schema**:
+  ```typescript
+  {
+    state: string,        // Either polling token or auth code
+    clientId: string,     // OAuth client ID
+    redirectUri: string,  // Client's callback URL
+    scope: string,       // OAuth scope
+    ibToken: {           // IB session info
+      sid?: string,
+      content: any
+    },
+    platformUrl: string, // IB platform URL
+    oauthState?: string, // Original OAuth state
+    expires: number      // TTL timestamp
+  }
+  ```
 
 ## API Gateway Configuration
 - Base URL: `https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev`

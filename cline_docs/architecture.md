@@ -46,8 +46,8 @@ The OAuth bridge service facilitates authentication between client applications 
 
 ### 3. DynamoDB Tables
 
-#### State Table
-- **Purpose**: Manages OAuth and login state
+#### State Table (`ib-oauth-state-${stage}`)
+- **Purpose**: Manages OAuth state and login state
 - **Schema**:
   ```typescript
   {
@@ -55,16 +55,40 @@ The OAuth bridge service facilitates authentication between client applications 
     clientId: string,        // OAuth client ID
     redirectUri: string,     // Client callback URL
     scope: string,          // OAuth scope
-    ibToken?: {             // IB session info
-      sid: string,
-      content: {
-        apiV3url: string,
-        clientid: string
-      }
-    },
+    ibToken: IBAuthResponse, // IB session info
+    platformUrl: string,    // IB platform URL
+    oauthState?: string,    // Original OAuth state
+    createdAt: number,      // Creation timestamp
     expires: number         // TTL timestamp
   }
   ```
+- **State Flow**:
+  1. Initial state with poll token during login
+  2. Session state with auth code after successful login
+  3. Automatic cleanup via TTL after token exchange
+
+#### Token Table (`ib-oauth-tokens-${stage}`)
+- **Purpose**: Stores OAuth tokens and session info
+- **Schema**:
+  ```typescript
+  {
+    accessToken: string (PK), // OAuth access token
+    refreshToken: string,     // OAuth refresh token (GSI)
+    clientId: string,        // OAuth client ID
+    scope: string,          // OAuth scope
+    ibToken: IBAuthResponse, // IB session info
+    platformUrl: string,    // IB platform URL
+    createdAt: number,      // Creation timestamp
+    expires: number         // TTL timestamp
+  }
+  ```
+- **Indexes**:
+  - Primary: accessToken
+  - GSI: refreshToken (for refresh token lookups)
+- **Token Flow**:
+  1. Store tokens after successful code exchange
+  2. Update on token refresh
+  3. Automatic cleanup via TTL after expiration
 
 ## Authentication Flow
 
