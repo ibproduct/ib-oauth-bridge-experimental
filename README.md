@@ -28,13 +28,13 @@ This service provides OAuth 2.0 compatibility for IntelligenceBank's Browser Log
    ```
 
 3. **Make API Requests**
-   ```javascript
-   const response = await fetch('/proxy/company.intelligencebank.com/api/3.0.0/users', {
-     headers: {
-       'Authorization': `Bearer ${tokens.access_token}`
-     }
-   });
-   ```
+    ```javascript
+    const response = await fetch('https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/users', {
+      headers: {
+        'Authorization': `Bearer ${tokens.access_token}`
+      }
+    });
+    ```
 
 ## Overview
 
@@ -100,26 +100,27 @@ The service implements OAuth 2.0 with PKCE (Proof Key for Code Exchange) support
     Examples:
     ```bash
     # Get users
-    GET /proxy/company.intelligencebank.com/api/3.0.0/users
+    GET https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/users
     Authorization: Bearer {access_token}
 
     # Search assets
-    GET /proxy/company.intelligencebank.com/api/3.0.0/assets/search?query=marketing
+    GET https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/assets/search?query=marketing
     Authorization: Bearer {access_token}
 
     # Upload file
-    POST /proxy/company.intelligencebank.com/api/3.0.0/assets/upload
+    POST https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/assets/upload
     Authorization: Bearer {access_token}
     Content-Type: multipart/form-data
 
     # Update metadata
-    PATCH /proxy/company.intelligencebank.com/api/3.0.0/assets/123
+    PATCH https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/company.intelligencebank.com/api/3.0.0/assets/123
     Authorization: Bearer {access_token}
     Content-Type: application/json
     ```
 
     Notes:
-    - Do not include 'https://' in the proxy path - it is automatically added
+    - The complete proxy URL structure is: https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy/{platform-domain}/{api-path}
+    - Do not include 'https://' in the {platform-domain} portion - it is automatically added
     - All HTTP methods are supported (GET, POST, PUT, PATCH, DELETE)
     - Request/response bodies are passed through unchanged
     - Headers are forwarded (except Authorization which is handled by the proxy)
