@@ -1,5 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { ZodError } from 'zod';
+import { IBSessionInfo } from '../../services/ib-client';
 import {
   validateTokenParams,
   createOAuthError,
@@ -169,13 +170,13 @@ async function handleAuthorizationCode(
     await storageService.deleteState(code);
 
     // Get API info from stored token
-    const apiInfo = stateEntry.ibToken.content as { apiV3url: string, clientid: string };
+    const sessionContent = stateEntry.ibToken.content as IBSessionInfo['content'];
 
     return successResponse({
       ...tokens,
-      platform_url: apiInfo.apiV3url,
-      client_id: apiInfo.clientid,
-      sid: stateEntry.ibToken.sid
+      platform_url: sessionContent.info.apiV3url,
+      client_id: sessionContent.info.clientid,
+      sid: sessionContent.session.sid
     });
   } catch (error) {
     if (error instanceof Error) {
@@ -273,13 +274,13 @@ async function handleRefreshToken(
     await storageService.deleteToken(tokenEntry.accessToken);
 
     // Get API info from stored token
-    const apiInfo = tokenEntry.ibToken.content as { apiV3url: string, clientid: string };
+    const sessionContent = tokenEntry.ibToken.content as IBSessionInfo['content'];
 
     return successResponse({
       ...tokens,
-      platform_url: apiInfo.apiV3url,
-      client_id: apiInfo.clientid,
-      sid: tokenEntry.ibToken.sid
+      platform_url: sessionContent.info.apiV3url,
+      client_id: sessionContent.info.clientid,
+      sid: sessionContent.session.sid
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes('refresh token')) {

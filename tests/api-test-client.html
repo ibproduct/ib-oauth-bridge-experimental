@@ -194,21 +194,37 @@
                 logDebug('Token response', { status: response.status, data });
                 
                 if (response.ok) {
-                    // Store tokens and API info
+                    // Store tokens
                     sessionStorage.setItem('access_token', data.access_token);
                     sessionStorage.setItem('refresh_token', data.refresh_token);
-                    // Clear code verifier after successful token exchange
                     sessionStorage.removeItem('code_verifier');
-                    apiV3url = data.platform_url;
-                    clientId = data.client_id;
-                    sid = data.sid;
-                    
-                    console.log('Stored values:', {
-                        apiV3url,
-                        clientId,
-                        sid,
-                        fullData: data
+
+                    // Get API info from userinfo endpoint
+                    const userinfoResponse = await fetch(`${apiGatewayUrl}/userinfo`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${data.access_token}`
+                        }
                     });
+
+                    if (userinfoResponse.ok) {
+                        const userinfo = await userinfoResponse.json();
+                        // Store API info in sessionStorage
+                        sessionStorage.setItem('ib_api_url', userinfo.ib_api_url);
+                        sessionStorage.setItem('ib_client_id', userinfo.ib_client_id);
+                        sessionStorage.setItem('ib_session_id', userinfo.ib_session_id);
+                        
+                        // Update memory variables
+                        apiV3url = userinfo.ib_api_url;
+                        clientId = userinfo.ib_client_id;
+                        sid = userinfo.ib_session_id;
+
+                        console.log('Stored API info:', {
+                            apiV3url,
+                            clientId,
+                            sid
+                        });
+                    }
                     
                     showCallbackResult('Successfully received tokens:\n' + JSON.stringify(data, null, 2), false);
                     document.getElementById('test-api-button').style.display = 'inline-block';
@@ -225,6 +241,10 @@
         // Test IB API call
         async function testIBApi() {
             const accessToken = sessionStorage.getItem('access_token');
+            const apiV3url = sessionStorage.getItem('ib_api_url');
+            const clientId = sessionStorage.getItem('ib_client_id');
+            const sid = sessionStorage.getItem('ib_session_id');
+
             if (!accessToken || !apiV3url || !clientId || !sid) {
                 showTestApiResult('Error: Missing access token, API info, or SID', true);
                 return;
@@ -331,6 +351,16 @@
                     }
                     throw new Error(`Userinfo Error: ${data.error_description || 'Unknown error'}`);
                 }
+
+                // Store API info from userinfo response
+                sessionStorage.setItem('ib_api_url', data.ib_api_url);
+                sessionStorage.setItem('ib_client_id', data.ib_client_id);
+                sessionStorage.setItem('ib_session_id', data.ib_session_id);
+                
+                // Update memory variables
+                apiV3url = data.ib_api_url;
+                clientId = data.ib_client_id;
+                sid = data.ib_session_id;
 
                 logDebug('Userinfo response', data);
                 showTestApiResult('Userinfo Response:\n' + JSON.stringify(data, null, 2), false);
