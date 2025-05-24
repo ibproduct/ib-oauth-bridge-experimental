@@ -2,22 +2,46 @@
 
 This service provides OAuth 2.0 compatibility for IntelligenceBank's Browser Login API, allowing applications to integrate with IntelligenceBank using standard OAuth 2.0 flows.
 
+## Overview
+
+This OAuth bridge service enables any application to integrate with IntelligenceBank's login system using standard OAuth 2.0 flows. Key features:
+
+- **No Pre-registration Required**: Works out of the box with any IntelligenceBank platform
+- **Self-Service Integration**: Just redirect users to the OAuth server - no setup needed
+- **Dynamic Platform Support**: Users can log in to any IntelligenceBank instance (e.g., https://company.intelligencebank.com)
+- **Standard OAuth 2.0**: Uses familiar OAuth flows and token management
+- **Secure by Default**: Implements best practices like PKCE and secure session handling
+
+The service acts as a bridge between your application and IntelligenceBank's authentication system:
+1. Your app redirects users to the OAuth server
+2. Users enter their IntelligenceBank platform URL
+3. Users log in securely through an iframe
+4. Your app receives standard OAuth tokens for API access
+
 ## Quick Start
 
 1. **Initialize OAuth Flow**
    ```javascript
+   // 1. Generate a unique client ID for your application
+   const clientId = 'my-app-' + Math.random().toString(36).substring(2);
+   
+   // 2. Create the authorization URL
    const authUrl = 'https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/authorize?' +
      new URLSearchParams({
        response_type: 'code',
-       client_id: 'your_client_id',
-       redirect_uri: 'https://your-app.com/callback',
+       client_id: clientId,  // Your generated client ID
+       redirect_uri: 'https://your-app.com/callback',  // Where to return after login
        scope: 'profile',
-       state: 'random_state_123',
-       // PKCE parameters
-       code_challenge: code_challenge,
-       code_challenge_method: 'S256'
+       state: 'random_state_123'  // Prevent CSRF attacks
      });
+   
+   // 3. Redirect to OAuth server
    window.location.href = authUrl;
+   
+   // The OAuth server will:
+   // - Ask user for their IntelligenceBank platform URL
+   // - Show login page in secure iframe
+   // - Handle authentication and redirect back to your app
    ```
 
 2. **Handle Callback**
@@ -79,16 +103,18 @@ The service implements OAuth 2.0 with PKCE (Proof Key for Code Exchange) support
    
    Query Parameters:
    - `response_type`: Must be "code"
-   - `client_id`: Your OAuth client ID
-   - `redirect_uri`: Your callback URL
-   - `scope`: Requested permissions
-   - `platform_url`: Your IntelligenceBank platform URL (e.g., "https://company.intelligencebank.com")
-   - `state`: (Optional) Client state for CSRF protection
+   - `client_id`: Your generated client identifier (any unique string)
+   - `redirect_uri`: Where to return after login
+   - `scope`: Requested permissions (use "profile")
+   - `platform_url`: (Optional) User's IntelligenceBank URL
+   - `state`: (Optional) Random string for CSRF protection
 
 2. **User Authentication**
-   - User is redirected to their IntelligenceBank login page
-   - User completes authentication on IntelligenceBank
-   - Bridge service polls for authentication completion
+    - User is presented with a platform URL input form
+    - After entering their IntelligenceBank platform URL, the login page loads in a secure iframe
+    - User completes authentication within the iframe
+    - Bridge service automatically polls for authentication completion
+    - Upon successful login, user is redirected to your callback URL
 
 3. **Handle Callback**
    - After successful login, user is redirected to your `redirect_uri`
@@ -248,18 +274,57 @@ PKCE (Proof Key for Code Exchange) is recommended for all clients, especially mo
    });
    ```
 
-### 2. Platform URL Handling
+### 2. Platform URL and Login Flow
 
-The platform URL can be provided in two ways:
+IntelligenceBank users can authenticate with any valid platform URL (e.g., https://company.intelligencebank.com). The OAuth flow handles this in two ways:
 
-a) **Client-Provided URL**
-   - Include `platform_url` parameter in the authorization request
-   - Bridge service validates and uses this URL for authentication
+a) **Let Users Enter Their Platform URL (Recommended)**
+    - Default flow - no additional configuration needed
+    - Users enter their IntelligenceBank platform URL
+    - Works for any IntelligenceBank instance
+    - Perfect for applications serving multiple IntelligenceBank clients
+    - Example:
+      ```javascript
+      // Simple authorization URL - no platform_url needed
+      const authUrl = 'https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/authorize?' +
+        new URLSearchParams({
+          response_type: 'code',
+          client_id: clientId,
+          redirect_uri: 'https://your-app.com/callback',
+          scope: 'profile',
+          state: 'random_state_123'
+        });
+      window.location.href = authUrl;
+      ```
 
-b) **User-Provided URL**
-   - Omit `platform_url` parameter
-   - Bridge service will present a form for users to enter their platform URL
-   - After URL validation, proceeds with authentication
+b) **Pre-fill Platform URL**
+    - Optional - use when you know user's platform URL
+    - Skips URL input step
+    - Still works with any valid IntelligenceBank URL
+    - Example:
+      ```javascript
+      // Include known platform URL to skip input step
+      const params = new URLSearchParams({
+        response_type: 'code',
+        client_id: clientId,
+        redirect_uri: 'https://your-app.com/callback',
+        scope: 'profile',
+        state: 'random_state_123',
+        platform_url: 'https://company.intelligencebank.com'
+      });
+      window.location.href = `https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/authorize?${params}`;
+      ```
+
+Login Flow:
+1. User arrives at OAuth authorization page
+2. If no platform URL provided:
+   - User sees simple URL input form
+   - User enters their IntelligenceBank URL
+   - Form validates URL is accessible
+3. IntelligenceBank login loads in secure iframe
+4. User logs in with their credentials
+5. OAuth server detects successful login
+6. User returns to your app with authorization code
 
 ### 2. Authentication Polling
 
@@ -358,9 +423,36 @@ async function refreshTokens(refreshToken) {
 
 ## Error Handling
 
-The service follows OAuth 2.0 error response formats. Here's how to handle common scenarios:
+The service provides clear error messages for all scenarios. Here's how to handle them:
 
-### 1. Token Expiry
+### 1. Platform URL and Login Errors
+```javascript
+// Invalid platform URL format
+{
+  "error": "invalid_request",
+  "error_description": "Invalid platform URL format - must be a valid IntelligenceBank URL"
+}
+
+// Platform not accessible
+{
+  "error": "invalid_request",
+  "error_description": "Unable to connect to IntelligenceBank platform"
+}
+
+// Login failed
+{
+  "error": "access_denied",
+  "error_description": "User authentication failed"
+}
+
+// Login timeout
+{
+  "error": "authorization_pending",
+  "error_description": "Authentication request has timed out"
+}
+```
+
+### 2. Token Expiry
 ```javascript
 async function handleApiRequest(url, token) {
   try {
@@ -526,18 +618,56 @@ X-RateLimit-Remaining: 95
 X-RateLimit-Reset: 1620000000
 ```
 
-## Support
+## Testing and Troubleshooting
 
-For integration support or issues:
+### Test Environment
+1. **Test Client**
+   - Use our hosted test client at https://d3p9mz3wmmolll.cloudfront.net
+   - Test your client ID and platform URL
+   - Verify the complete OAuth flow
+   - Check token management and API access
+
+2. **Common Issues**
+   - **Login Page Not Loading**
+     * Verify platform URL is correct and accessible
+     * Check browser console for CORS or CSP errors
+     * Ensure platform URL includes https://
+   
+   - **Iframe Login Issues**
+     * Verify your browser allows third-party cookies
+     * Check for browser extensions blocking iframes
+     * Ensure platform URL is trusted in your security settings
+   
+   - **Authentication Polling Timeout**
+     * Default timeout is 5 minutes
+     * Check network connectivity
+     * Verify user completed login in iframe
+     * Check browser console for errors
+
+3. **Integration Checklist**
+    - [ ] Platform URL validation tested
+    - [ ] Login flow working in iframe
+    - [ ] PKCE implementation tested (recommended)
+    - [ ] Token storage implemented securely
+    - [ ] Error handling implemented for all scenarios
+    - [ ] Session management and refresh flow tested
+    - [ ] Rate limiting handled appropriately
+
+## Resources and Support
+
+Everything you need to integrate with IntelligenceBank:
 
 1. **Documentation**
-   - [API Documentation](docs/api-documentation.md)
-   - [Error Codes](docs/api-documentation.md#error-codes)
-   - [Best Practices](docs/api-documentation.md#best-practices)
+    - [API Documentation](docs/api-documentation.md) - Complete API reference
+    - [Error Codes](docs/api-documentation.md#error-codes) - Detailed error handling guide
+    - [Best Practices](docs/api-documentation.md#best-practices) - Security and implementation tips
 
-2. **Sample Code**
-    - [Python Client](examples/python/ib_oauth_client.py) - Complete Python SDK with PKCE support, token management, and error handling
+2. **Integration Tools**
+    - [Test Client](https://d3p9mz3wmmolll.cloudfront.net) - Try the OAuth flow live
+    - [Python Client](examples/python/ib_oauth_client.py) - Complete SDK with examples
+    - Browser DevTools - Monitor the OAuth flow in action
 
-3. **Support Channels**
-   - Open an issue in this repository
-   - Contact IntelligenceBank support
+3. **Getting Help**
+    - Check the [Common Issues](#common-issues) section above
+    - Open an issue in this repository for technical questions
+    - Use browser DevTools to debug login flow issues
