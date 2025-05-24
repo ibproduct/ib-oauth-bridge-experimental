@@ -194,14 +194,14 @@ const FORM_HTML = `<!DOCTYPE html>
         <div id="login-container">
             <div class="header">
                 <h2>Complete Login</h2>
-                <p>Please complete the login process in the window below.</p>
+                <p>Please complete the login process below.</p>
             </div>
             <div class="loader" id="login-loader"></div>
             <div class="status" id="status-message">Initializing login...</div>
             <iframe id="login-frame"
                     frameborder="0"
                     title="IntelligenceBank Login"
-                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-top-navigation">
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups">
             </iframe>
         </div>
     </div>
@@ -211,6 +211,26 @@ const FORM_HTML = `<!DOCTYPE html>
         function logDebug(action, data) {
             console.log("[OAuth Debug] " + action + ":", data);
         }
+
+        // Listen for message from auth window
+        window.addEventListener('message', (event) => {
+            // Verify origin is from IntelligenceBank domain
+            const platformUrl = sessionStorage.getItem('platform_url');
+            if (platformUrl && event.origin === new URL(platformUrl).origin) {
+                if (event.data === 'login_complete') {
+                    logDebug('Received login complete message from:', event.origin);
+                    showStatus('Login successful, checking status...', 'success');
+                }
+            } else {
+                logDebug('Ignored message from untrusted origin:', event.origin);
+            }
+        });
+
+        // Store platform URL for origin verification
+        document.getElementById('platform-form').addEventListener('submit', function(e) {
+            const platformUrl = e.target.querySelector('#platform_url').value;
+            sessionStorage.setItem('platform_url', platformUrl);
+        });
 
         // Handle form submission
         document.getElementById('platform-form').onsubmit = async function(e) {
@@ -410,7 +430,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       statusCode: 200,
       headers: {
         'Content-Type': 'text/html',
-        'Content-Security-Policy': "frame-ancestors *",
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-src *;",
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization'

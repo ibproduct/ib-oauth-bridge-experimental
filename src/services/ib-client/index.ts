@@ -141,7 +141,7 @@ export class IBClient {
     token: string
   ): string {
     // For login URL, we use the original platform URL since this is opened in the browser
-    return `${platformUrl}/auth/?login=0&token=${token}`;
+    return `${platformUrl}/auth/?login=0&token=${token}&display=iframe`;
   }
 
   /**
