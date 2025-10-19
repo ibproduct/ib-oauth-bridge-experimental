@@ -117,60 +117,176 @@ npm run cdk:diff
 
 ## Environment Management
 
-### Development Environment
-- Stack name: `ib-oauth-stack-dev`
-- API Gateway stage: `dev`
-- DynamoDB tables: `*-dev`
-- CloudWatch logs: `/aws/lambda/*-dev`
+### New Architecture: Lambda Aliases
+This project uses a **single CloudFormation stack** with Lambda function aliases to manage dev and production environments:
 
-### Production Environment
-- Stack name: `ib-oauth-stack-prod`
-- API Gateway stage: `prod`
-- DynamoDB tables: `*-prod`
-- CloudWatch logs: `/aws/lambda/*-prod`
+- **Stack name**: `ib-oauth-stack` (single stack)
+- **Lambda functions**: No stage suffix (e.g., `ib-oauth-authorize`, `ib-oauth-token`)
+- **DynamoDB tables**: No stage suffix (shared: `ib-oauth-state`, `ib-oauth-tokens`)
+- **API Gateway stages**:
+  - `dev` → points to `dev` alias (always $LATEST)
+  - `main` → points to `main` alias (specific published versions)
 
-### Environment Isolation
-1. Separate CloudFormation stacks
-2. Environment-specific resources
-3. Isolated logging
-4. Independent scaling
+### Lambda Alias Strategy
+
+**Dev Alias (`dev`):**
+- Always points to `$LATEST` version
+- Auto-updates when you deploy code
+- Used for active development and testing
+- Accessed via: `https://{api-id}.execute-api.us-west-1.amazonaws.com/dev/`
+
+**Main Alias (`main`):**
+- Points to specific published versions
+- Manually promoted from dev after testing
+- Production-stable code
+- Accessed via: `https://{api-id}.execute-api.us-west-1.amazonaws.com/main/`
+
+### Benefits of This Architecture
+1. **Single source of truth**: One function with versioned deployments
+2. **Cost savings**: ~50% reduction in Lambda functions and resources
+3. **Easier promotion**: Test on dev, then publish and update main alias
+4. **Clear deployment**: Explicit version promotion with rollback capability
+5. **Better CI/CD**: Matches standard Lambda deployment patterns
 
 ## Deployment Process
 
-### 1. Development Deployment
+### 1. Deploy to Dev (Auto-updates $LATEST)
 ```bash
-# Deploy to dev
-npm run cdk:deploy:dev
+# Build and deploy infrastructure
+npm run cdk:deploy
 
-# Verify deployment
-aws cloudformation describe-stacks --stack-name ib-oauth-stack-dev
+# This updates $LATEST automatically
+# Dev alias immediately gets the new code
+```
 
-# Test endpoints
+### 2. Test on Dev
+```bash
+# Test dev endpoints
+curl https://{api-id}.execute-api.us-west-1.amazonaws.com/dev/authorize
+
+# Run integration tests
 npm run test:integration
 ```
 
-### 2. Production Deployment
+### 3. Promote to Main (Publish & Update Alias)
 ```bash
-# Pre-deployment checks
-npm run test
-npm run lint
-npm run build
+# After testing dev, publish all functions to main
+npm run publish:main
 
-# Deploy to production
-npm run cdk:deploy:prod
-
-# Post-deployment verification
-npm run test:prod
+# Or publish a specific function
+npm run publish:function ib-oauth-authorize
 ```
 
-### 3. Rollback Procedures
-```bash
-# Rollback production
-aws cloudformation rollback-stack --stack-name ib-oauth-stack-prod
+This script:
+- Publishes a new version from $LATEST
+- Updates the `main` alias to point to the new version
+- Leaves `dev` alias pointing to $LATEST
 
-# Verify rollback
-aws cloudformation describe-stacks --stack-name ib-oauth-stack-prod
+### 4. Rollback Procedures
+```bash
+# List available versions
+aws lambda list-versions-by-function \
+  --function-name ib-oauth-authorize \
+  --region us-west-1
+
+# Rollback main alias to a specific version
+aws lambda update-alias \
+  --function-name ib-oauth-authorize \
+  --name main \
+  --function-version 3 \
+  --region us-west-1
 ```
+
+## Production Deployment
+
+### Pre-deployment Checklist
+- [ ] All tests passing
+- [ ] Security review completed
+- [ ] Documentation updated
+- [ ] Performance testing done
+- [ ] Dev alias tested thoroughly
+
+### Initial Production Deployment
+
+```bash
+# 1. Build Lambda functions
+npm run build:lambdas
+
+# 2. Build CDK
+npm run build:cdk
+
+# 3. Deploy stack (creates/updates $LATEST)
+npm run cdk:deploy
+
+# This creates:
+# - Single CloudFormation stack: ib-oauth-stack
+# - Lambda functions without stage suffix
+# - dev and main aliases for each function
+# - API Gateway with dev and main stages
+# - Shared DynamoDB tables
+```
+
+### Production Verification
+- Endpoint health checks on both stages
+- Metric verification by alias
+- Log inspection
+- Security validation
+- Performance testing
+
+### Version Management
+
+```bash
+# List all versions
+aws lambda list-versions-by-function \
+  --function-name ib-oauth-authorize \
+  --region us-west-1
+
+# Delete old versions (keep last 5-10)
+aws lambda delete-function \
+  --function-name ib-oauth-authorize:5 \
+  --region us-west-1
+```
+
+### Emergency Rollback
+
+#### Alias Rollback (Recommended)
+```bash
+# List available versions
+aws lambda list-versions-by-function \
+  --function-name ib-oauth-authorize \
+  --region us-west-1
+
+# Update main alias to previous version
+aws lambda update-alias \
+  --function-name ib-oauth-authorize \
+  --name main \
+  --function-version 3 \
+  --region us-west-1
+
+# Repeat for all functions or use script
+./scripts/publish-version.sh ib-oauth-authorize 3
+```
+
+#### Stack Rollback
+```bash
+# If needed, rollback entire stack
+aws cloudformation rollback-stack --stack-name ib-oauth-stack
+
+# Monitor rollback
+aws cloudformation describe-stack-events \
+  --stack-name ib-oauth-stack \
+  --region us-west-1
+```
+
+### Emergency Procedures
+1. **Identify Issue**: Check CloudWatch logs and metrics
+2. **Determine Scope**: Is it dev or main alias?
+3. **Immediate Action**:
+   - If main is affected, rollback alias to previous version
+   - If dev is affected, investigate and fix
+4. **Communication**: Notify affected stakeholders
+5. **Resolution**: Fix issue and redeploy
+6. **Post-Mortem**: Document incident and preventive measures
 
 ## Testing Process
 
@@ -189,7 +305,7 @@ npm test -- --coverage
 ### 2. Integration Testing
 ```bash
 # Deploy to dev
-npm run cdk:deploy:dev
+npm run cdk:deploy
 
 # Run integration tests
 npm run test:integration
@@ -200,8 +316,8 @@ npm run test:client
 
 ### 3. Production Testing
 ```bash
-# Run production tests
-npm run test:prod
+# Test main endpoints
+curl https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/main/authorize
 
 # Monitor production metrics
 npm run monitor:prod
@@ -211,29 +327,53 @@ npm run monitor:prod
 
 ### 1. CloudWatch Logs
 ```bash
-# Watch dev logs
-aws logs tail /aws/lambda/ib-oauth-authorize-dev --follow
+# Watch dev logs ($LATEST)
+aws logs tail /aws/lambda/ib-oauth-authorize --follow
 
-# Watch prod logs
-aws logs tail /aws/lambda/ib-oauth-authorize-prod --follow
+# Filter by alias using log stream
+# Dev and main versions create separate log streams
 ```
 
 ### 2. Metrics & Alerts
-```bash
-# View dev metrics
-aws cloudwatch get-metric-data --metric-data-queries file://dev-metrics.json
 
-# View prod metrics
-aws cloudwatch get-metric-data --metric-data-queries file://prod-metrics.json
+#### Dev Alias Metrics
+```bash
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/Lambda \
+  --metric-name Invocations \
+  --dimensions Name=FunctionName,Value=ib-oauth-authorize Name=Resource,Value=ib-oauth-authorize:dev \
+  --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+  --period 300 \
+  --statistics Sum
 ```
+
+#### Main Alias Metrics
+```bash
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/Lambda \
+  --metric-name Invocations \
+  --dimensions Name=FunctionName,Value=ib-oauth-authorize Name=Resource,Value=ib-oauth-authorize:main \
+  --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+  --period 300 \
+  --statistics Sum
+```
+
+#### Monitoring Best Practices
+- Set up CloudWatch alarms per alias
+- Monitor error rates separately for dev and main
+- Track version deployment history
+- Monitor DynamoDB metrics (shared tables)
+- Set up cost alerts
 
 ### 3. Health Checks
 ```bash
 # Check dev endpoints
-curl -v https://dev-api.example.com/health
+curl -v https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/dev/authorize
 
-# Check prod endpoints
-curl -v https://api.example.com/health
+# Check main endpoints
+curl -v https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/main/authorize
 ```
 
 ## Documentation
@@ -259,41 +399,76 @@ curl -v https://api.example.com/health
 ## Release Process
 
 ### 1. Pre-release Checklist
-- [ ] All tests passing
+- [ ] All tests passing on dev
 - [ ] Documentation updated
 - [ ] Security review completed
 - [ ] Performance testing done
+- [ ] Client applications ready for endpoint updates
 
 ### 2. Release Steps
-1. Tag release version
-2. Deploy to production
-3. Run verification tests
-4. Monitor metrics
-5. Update documentation
+1. Verify dev alias is stable
+2. Publish versions: `npm run publish:main`
+3. Run verification tests on main
+4. Monitor main alias metrics
+5. Update client documentation
+6. Notify stakeholders
 
 ### 3. Post-release Tasks
-- Monitor error rates
-- Watch performance metrics
+- Monitor error rates by alias
+- Watch performance metrics (especially main)
 - Check user feedback
 - Document lessons learned
+- Archive old Lambda versions
+
+## Cost Management
+
+### Benefits of Single-Stack Architecture
+- **~50% cost reduction** from single set of Lambda functions
+- Shared DynamoDB tables (no duplication)
+- Single API Gateway (multiple stages)
+- Reduced CloudWatch log storage
+
+### Resource Optimization
+- Lambda memory/timeout configuration
+- DynamoDB on-demand vs. provisioned capacity
+- API Gateway caching
+- CloudWatch log retention policies (default: 30 days)
+
+### Cost Monitoring
+```bash
+# Tag all resources for cost tracking
+# All resources tagged with: Project=ib-oauth, ManagedBy=cdk
+
+# View costs by resource tag
+aws ce get-cost-and-usage \
+  --time-period Start=2025-01-01,End=2025-01-31 \
+  --granularity MONTHLY \
+  --filter file://cost-filter.json \
+  --metrics BlendedCost
+```
 
 ## Security Considerations
 
-### 1. Access Control
-- IAM roles per environment
-- Least privilege principle
-- Regular permission review
+### 1. Infrastructure Security
+- VPC configuration (if required)
+- Security groups
+- IAM roles with least privilege
+- KMS encryption for DynamoDB
+- WAF rules for API Gateway
 
-### 2. Data Protection
-- Encryption at rest
-- Secure token storage
-- Data retention policies
+### 2. Application Security
+- Rate limiting at API Gateway
+- Input validation with Zod
+- Token security (JWT)
+- Session management
+- CORS configuration
 
-### 3. Monitoring
-- Security alerts
-- Access logging
-- Audit trail
-- Incident response
+### 3. Monitoring & Alerts
+- Error rate monitoring by alias
+- Performance alerts
+- Security notifications
+- Resource utilization alerts
+- Cost alerts
 
 ## Best Practices
 
@@ -310,7 +485,62 @@ curl -v https://api.example.com/health
    - Audit logging
 
 3. Operations
-   - Automated deployment
-   - Monitoring
-   - Documentation
+   - Automated deployment with alias promotion
+   - Per-alias monitoring
+   - Documentation maintenance
    - Backup procedures
+
+## Disaster Recovery
+
+### Backup Strategy
+- DynamoDB point-in-time recovery enabled
+- CloudFormation template in version control
+- Lambda function code in Git
+- Configuration backups
+- Documentation maintained
+
+### Recovery Procedures
+1. Recreate CloudFormation stack from template
+2. Restore DynamoDB data if needed
+3. Deploy Lambda functions
+4. Verify configuration
+5. Run verification tests
+
+## Production Infrastructure Details
+
+### API Gateway Configuration
+- Custom domain with SSL certificate (optional)
+- WAF integration for security
+- Request throttling and rate limiting
+- Usage plans and API keys
+- Enhanced logging
+- Two stages: dev and main
+
+### Lambda Configuration
+- Memory: 256MB (adjustable)
+- Timeout: 10 seconds
+- Versioning enabled
+- Aliases: dev and main
+- Reserved concurrency (if needed)
+- VPC integration (if required)
+
+### DynamoDB Configuration
+- On-demand capacity mode
+- Auto-scaling (if using provisioned)
+- Point-in-time recovery enabled
+- Encryption at rest
+- Backup strategy configured
+
+## Compliance & Auditing
+
+### Audit Trails
+- CloudWatch logs (all requests logged)
+- CloudFormation change history
+- Lambda version history
+- DynamoDB item-level changes (if enabled)
+
+### Compliance Checks
+- OAuth 2.0 compliance
+- Security best practices
+- Data protection regulations
+- AWS best practices

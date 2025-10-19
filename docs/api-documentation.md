@@ -1,7 +1,14 @@
 # API Documentation
 
-## Base URL
-`https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev`
+## Base URLs
+
+### Development
+`https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/dev/`
+
+### Production
+`https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/main/`
+
+> **Note:** The service uses a single-stack architecture with Lambda aliases. The `dev` stage points to the latest code (`$LATEST`), while `main` points to published versions. See [development-workflow.md](./development-workflow.md) for details.
 
 ## Authorization Endpoints
 
@@ -276,7 +283,7 @@ Access-Control-Allow-Headers: Content-Type, Authorization
 ## State Management
 ### DynamoDB Tables
 
-#### State Table (`ib-oauth-state-${stage}`)
+#### State Table (`ib-oauth-state`)
 - **Purpose**: Stores authorization state
 - **Schema**:
   ```typescript
@@ -301,7 +308,7 @@ Access-Control-Allow-Headers: Content-Type, Authorization
   - Polling tokens: 5 minutes
   - Auth codes: 10 minutes
 
-#### Token Table (`ib-oauth-tokens-${stage}`)
+#### Token Table (`ib-oauth-tokens`)
 - **Purpose**: Stores OAuth tokens and session state
 - **Schema**:
   ```typescript

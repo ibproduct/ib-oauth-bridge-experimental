@@ -156,17 +156,29 @@ REFRESH_TOKEN_EXPIRY=2592000
 
 ## Deployment Architecture
 
-### Development Environment
-- Region: us-west-1
-- Stage: dev
-- Stack name: ib-oauth-stack-dev
-- Domain: oauth-dev.yourdomain.com
+### Single-Stack with Lambda Aliases
+- Region: us-west-1 (mandatory)
+- Stack name: `ib-oauth-stack` (single stack for all environments)
+- Lambda functions: No stage suffix (e.g., `ib-oauth-authorize`)
+- DynamoDB tables: No stage suffix (shared across aliases)
 
-### Production Environment
-- Region: us-west-1
-- Stage: prod
-- Stack name: ib-oauth-stack-prod
-- Domain: oauth.yourdomain.com
+### API Gateway Stages
+- **Dev Stage**: `https://{api-id}.execute-api.us-west-1.amazonaws.com/dev/`
+  - Points to Lambda `dev` alias
+  - `dev` alias always points to `$LATEST`
+  - Auto-updates on deployment
+  
+- **Main Stage**: `https://{api-id}.execute-api.us-west-1.amazonaws.com/main/`
+  - Points to Lambda `main` alias
+  - `main` alias points to specific published versions
+  - Manually promoted after testing
+
+### Deployment Workflow
+1. Deploy CDK stack → Updates `$LATEST`
+2. `dev` alias automatically gets new code
+3. Test on dev stage
+4. Run `npm run publish:main` to promote to main
+5. `main` alias updated to new published version
 
 ## Scaling & Performance
 

@@ -49,24 +49,31 @@ The OAuth bridge service facilitates authentication between client applications 
   5. Handle errors
 
 ### 2. API Gateway
-- **Base URL**: `https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev`
+- **Single API Gateway** with two stages
+- **Dev Stage**: `https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/dev/`
+  - Points to Lambda `dev` alias (→ $LATEST)
+  - Auto-updates on deployment
+- **Main Stage**: `https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/main/`
+  - Points to Lambda `main` alias (→ published versions)
+  - Manually promoted
 - **Endpoints**:
   ```
   GET  /authorize         - Start OAuth flow
   GET  /authorize/poll    - Check login status
   POST /token            - Exchange code for tokens
-  *    /api/v3/*        - API proxy endpoints
+  GET  /userinfo         - OpenID Connect userinfo
+  *    /proxy/{proxy+}   - API proxy endpoints
   ```
 - **Features**:
   - CORS support
   - Request validation
-  - Lambda integration
+  - Lambda integration with aliases
   - Error handling
   - Rate limiting
 
 ### 3. DynamoDB Tables
 
-#### State Table (`ib-oauth-state-${stage}`)
+#### State Table (`ib-oauth-state`)
 - **Purpose**: Manages OAuth state and login state
 - **Schema**:
   ```typescript
@@ -94,7 +101,7 @@ The OAuth bridge service facilitates authentication between client applications 
   2. Session state with auth code after successful login
   3. Automatic cleanup via TTL after token exchange
 
-#### Token Table (`ib-oauth-tokens-${stage}`)
+#### Token Table (`ib-oauth-tokens`)
 - **Purpose**: Stores OAuth tokens and session info
 - **Schema**:
   ```typescript
@@ -242,43 +249,46 @@ The OAuth bridge service facilitates authentication between client applications 
 - Session expiry
 - Refresh limits exceeded
 
-## Development Setup
+## Deployment Architecture
 
-### Local Development
+### Single-Stack with Lambda Aliases
+- **Stack Name**: `ib-oauth-stack`
+- **Lambda Functions**: No stage suffix (e.g., `ib-oauth-authorize`)
+- **Lambda Aliases**:
+  - `dev` → Always points to $LATEST (auto-updates)
+  - `main` → Points to published versions (manual promotion)
+- **DynamoDB Tables**: Shared without stage suffix
+- **API Gateway Stages**: `dev` and `main` route to respective aliases
+
+### Deployment Workflow
 ```bash
-# Install dependencies
-npm install
+# 1. Deploy to update $LATEST
+npm run cdk:deploy
 
-# Build Lambda functions
-npm run build:lambdas
+# 2. Test on dev stage
+curl https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/dev/authorize
 
-# Deploy to dev
-npm run cdk:deploy:dev
+# 3. Promote to main
+npm run publish:main
+
+# 4. Verify main stage
+curl https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/main/authorize
 ```
 
-### Testing
+### Rollback Procedures
 ```bash
-# Run tests
-npm test
+# List versions
+aws lambda list-versions-by-function \
+  --function-name ib-oauth-authorize
 
-# Test client
-npm run test:client
+# Rollback main alias to previous version
+aws lambda update-alias \
+  --function-name ib-oauth-authorize \
+  --name main \
+  --function-version 3
 ```
 
-## Production Environment
-
-### Infrastructure
-- Separate CloudFormation stack
-- Production API Gateway
-- Production DynamoDB tables
-- Enhanced monitoring
-- Automated scaling
-
-### Deployment
-- Zero-downtime updates
-- Rollback capability
-- Version control
-- Audit logging
+See [MIGRATION.md](./MIGRATION.md) for complete migration guide.
 
 ### Monitoring
 - Performance metrics

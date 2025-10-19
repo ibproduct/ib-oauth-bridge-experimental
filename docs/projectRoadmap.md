@@ -93,30 +93,48 @@ Note: Working within IB API constraints:
 ## Production Planning
 
 ### Environment Setup
-1. Development Infrastructure
+1. Infrastructure Architecture (Single-Stack with Lambda Aliases)
+   - Single CloudFormation stack: `ib-oauth-stack`
+   - Lambda aliases: `dev` (→ $LATEST) and `main` (→ published versions)
+   - API Gateway stages: dev and main
+   - Shared DynamoDB tables
+   - See [MIGRATION.md](./MIGRATION.md) for migration details
+
+2. Development Infrastructure
    - OAuth endpoints
    - Proxy integration
    - Test environment
    - Monitoring setup
+   - Dev alias automatically updated with each deployment
 
-2. Production Infrastructure
-   - Separate stack
+3. Production Infrastructure
+   - Main alias pointing to published versions
    - Enhanced security
-   - Monitoring
-   - Backup procedures
+   - Monitoring by alias
+   - Version-based rollback capability
 
 ### Deployment Process
 1. Development Phase
    - Implement features
-   - Test thoroughly
+   - Deploy to update $LATEST
+   - Test on dev stage
    - Document changes
    - Verify functionality
 
-2. Production Phase
-   - Security review
-   - Load testing
-   - Deployment
-   - Monitoring setup
+2. Production Promotion
+   - Publish Lambda versions
+   - Update main alias to new versions
+   - Test on main stage
+   - Monitor performance
+   - Rollback if needed
+
+3. Migration from Two-Stack Architecture
+   - See [MIGRATION.md](./MIGRATION.md) for complete guide
+   - Backup existing stacks
+   - Delete old dev and prod stacks
+   - Deploy new single stack
+   - Update client endpoints
+   - Verify functionality
 
 ## Completion Criteria
 
@@ -126,13 +144,18 @@ Note: Working within IB API constraints:
 - Token management complete
 - Testing suite passing
 - Documentation updated
+- ✅ Single-stack architecture implemented
+- ✅ Lambda aliases configured
+- ✅ Migration guide created
 
 ### Production Environment
-- Infrastructure deployed
+- Infrastructure deployed with Lambda aliases
 - Security measures active
-- Monitoring configured
-- Backup procedures tested
+- Monitoring configured by alias
+- Version management tested
+- Rollback procedures verified
 - Documentation complete
+- Client applications updated with new endpoints
 
 ## Timeline
 

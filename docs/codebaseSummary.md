@@ -139,24 +139,39 @@
 
 ### AWS Deployment
 
-1. Infrastructure Components
-    - API Gateway for endpoints
-    - Lambda functions for handlers
-    - DynamoDB for token storage
+1. Infrastructure Architecture
+    - Single CloudFormation stack (`ib-oauth-stack`)
+    - Lambda aliases for environment separation (`dev` and `main`)
+    - API Gateway with two stages (dev and main)
+    - Shared DynamoDB tables without stage suffix
+    - CloudWatch for monitoring across all versions
+
+2. Infrastructure Components
+    - API Gateway for endpoints with dev/main stages
+    - Lambda functions with version management
+    - Lambda aliases: `dev` (→ $LATEST), `main` (→ published version)
+    - DynamoDB for token storage (shared across stages)
     - CloudWatch for monitoring
     - IAM roles for security
 
-2. Security Configuration
+3. Security Configuration
     - API Gateway SSL/TLS
     - DynamoDB encryption
     - IAM role permissions
     - Lambda security groups
+    - Separate permissions for dev and main aliases
 
-3. Monitoring Setup
-    - CloudWatch logs
-    - Lambda metrics
+4. Monitoring Setup
+    - CloudWatch logs (single log group per function)
+    - Lambda metrics by alias
     - DynamoDB monitoring
-    - API Gateway dashboard
+    - API Gateway dashboard by stage
+
+5. Deployment Strategy
+    - Deploy to update $LATEST (automatically updates dev)
+    - Publish versions to promote to main
+    - Rollback by updating alias to previous version
+    - See [MIGRATION.md](./MIGRATION.md) for architecture details
 
 ### Current Focus
 
@@ -182,15 +197,22 @@
     - Error rates tracked
     - Performance metrics collected
 
-4. Next Steps 🔄
-    - Complete user info endpoint
+4. Infrastructure Status ✅
+    - Single-stack architecture with Lambda aliases
+    - Dev and main environments configured
+    - Version management implemented
+    - Promotion workflow documented
+
+5. Next Steps 🔄
+    - Test end-to-end deployment workflow
+    - Migrate from old two-stack architecture
     - Add rate limiting
     - Implement automated testing
     - Set up production monitoring
-    - Plan production deployment
 
-5. Documentation Tasks 📋
+6. Documentation Tasks 📋
+    - ✅ Migration guide created
+    - ✅ Development workflow updated
+    - ✅ Architecture documentation updated
     - Update API documentation
-    - Create integration guide
-    - Document error handling
     - Add usage examples

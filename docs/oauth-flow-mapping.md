@@ -25,7 +25,7 @@ The OAuth flow is implemented using AWS Lambda functions behind API Gateway, wit
   4. Returns tokens with IB session info
 
 ### 3. State Management
-- **Storage**: DynamoDB state table (`ib-oauth-state-${stage}`)
+- **Storage**: DynamoDB state table (`ib-oauth-state`)
 - **States**:
   1. Polling state (state = polling token)
      - Stores IB initial token
@@ -69,12 +69,25 @@ The OAuth flow is implemented using AWS Lambda functions behind API Gateway, wit
   ```
 
 ## API Gateway Configuration
-- Base URL: `https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev`
-- Endpoints:
-  - `/authorize`: OAuth authorization endpoint
-  - `/authorize/poll`: Login status polling endpoint
-  - `/token`: Token exchange endpoint
-  - `/userinfo`: OpenID Connect userinfo endpoint
+
+### Single API Gateway with Two Stages
+
+**Dev Stage**: `https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/dev/`
+- Points to Lambda `dev` alias (→ $LATEST)
+- Auto-updates on deployment
+
+**Main Stage**: `https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/main/`
+- Points to Lambda `main` alias (→ published versions)
+- Manually promoted
+
+**Endpoints** (available on both stages):
+- `/authorize`: OAuth authorization endpoint
+- `/authorize/poll`: Login status polling endpoint
+- `/token`: Token exchange endpoint
+- `/userinfo`: OpenID Connect userinfo endpoint
+- `/proxy/{proxy+}`: IB API proxy endpoint
+
+> **Architecture Note:** The service uses a single CloudFormation stack (`ib-oauth-stack`) with Lambda aliases for environment separation. See [architecture.md](./architecture.md) for architecture details.
 
 ## Flow Details
 

@@ -4,6 +4,22 @@
 
 This guide explains how to integrate with the OAuth service and use the IB API proxy endpoint. The service provides a standard OAuth 2.0 flow for authentication and a simple proxy endpoint for making IB API calls.
 
+## Service Endpoints
+
+### Development Environment
+**Base URL**: `https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/dev/`
+- Uses latest code ($LATEST via `dev` alias)
+- Auto-updates on deployment
+- For testing and development
+
+### Production Environment
+**Base URL**: `https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/main/`
+- Uses published versions via `main` alias
+- Manually promoted from dev
+- Stable production code
+
+> **Note:** The service uses a single-stack architecture with Lambda aliases. See [development-workflow.md](./development-workflow.md) for details on the deployment process.
+
 ## Authentication Flow
 
 ### 1. OAuth Authorization
@@ -35,7 +51,7 @@ async function startAuth() {
   // Store code verifier for token exchange
   sessionStorage.setItem('code_verifier', codeVerifier);
   
-  const authUrl = `https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/authorize
+  const authUrl = `https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/dev/authorize
     ?response_type=code
     &client_id=${clientId}
     &redirect_uri=${redirectUri}
@@ -52,7 +68,7 @@ async function startAuth() {
 ```typescript
 // On redirect back to your application
 async function handleCallback(code: string) {
-  const response = await fetch('https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/token', {
+  const response = await fetch('https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/dev/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded'
@@ -76,7 +92,7 @@ async function handleCallback(code: string) {
 ```typescript
 // Get user information using access token
 async function getUserInfo() {
-  const response = await fetch('https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/userinfo', {
+  const response = await fetch('https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/dev/userinfo', {
     headers: {
       'Authorization': `Bearer ${access_token}`
     }
@@ -115,7 +131,7 @@ Note: The userinfo endpoint returns user profile information that was obtained d
 ```typescript
 // Initialize API client with OAuth token
 const apiClient = axios.create({
-  baseURL: 'https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy',
+  baseURL: 'https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/dev/proxy',
   headers: {
     'Authorization': `Bearer ${access_token}`
   }
@@ -358,7 +374,7 @@ class IBAPIClient {
   constructor(accessToken: string, refreshToken: string) {
     this.refreshToken = refreshToken;
     this.apiClient = axios.create({
-      baseURL: 'https://n4h948fv4c.execute-api.us-west-1.amazonaws.com/dev/proxy',
+      baseURL: 'https://66qz7xd2w8.execute-api.us-west-1.amazonaws.com/dev/proxy',
       headers: {
         'Authorization': `Bearer ${accessToken}`
       }
