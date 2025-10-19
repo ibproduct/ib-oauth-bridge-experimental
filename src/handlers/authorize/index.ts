@@ -179,6 +179,7 @@ const FORM_HTML = `<!DOCTYPE html>
                     <input type="url"
                            id="platform_url"
                            name="platform_url"
+                           value="{{platform_url}}"
                            placeholder="https://company.intelligencebank.com"
                            required
                     >
@@ -194,15 +195,10 @@ const FORM_HTML = `<!DOCTYPE html>
         <div id="login-container">
             <div class="header">
                 <h2>Complete Login</h2>
-                <p>Please complete the login process below.</p>
+                <p>Please complete the login process in the popup window. If you don't see the window, check if it was blocked by your browser.</p>
             </div>
             <div class="loader" id="login-loader"></div>
-            <div class="status" id="status-message">Initializing login...</div>
-            <iframe id="login-frame"
-                    frameborder="0"
-                    title="IntelligenceBank Login"
-                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups">
-            </iframe>
+            <div class="status" id="status-message">Waiting for login completion...</div>
         </div>
     </div>
 
@@ -252,30 +248,26 @@ const FORM_HTML = `<!DOCTYPE html>
                 // Build query string
                 const queryString = new URLSearchParams(formData).toString();
                 // Use relative URL to avoid issues with CloudFront
-                const response = await fetch("?" + queryString);
+                // Include Accept header to indicate we expect JSON response
+                const response = await fetch("?" + queryString, {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
 
                 const data = await response.json();
                 logDebug('Auth response', data);
                 
-                if (response.ok) {
-                    // Store token for polling
-                    window.currentToken = data.token;
+                if (response.ok && data.loginUrl) {
                     // Show login container
                     document.getElementById('url-form').style.display = 'none';
                     document.getElementById('login-container').style.display = 'block';
                     document.getElementById('login-loader').style.display = 'block';
-                    
-                    // Get iframe element
-                    const iframe = document.getElementById('login-frame');
-                    
-                    // Start polling and listen for completion message
-                    iframe.onload = () => {
-                        // Start polling after iframe loads
-                        startPolling(data.token);
-                    };
-                    
-                    // Load login page in iframe
-                    iframe.src = data.loginUrl;
+
+                    // Open login URL in new window
+                    window.open(data.loginUrl, 'ib_login', 'width=800,height=600');
+                    // Start polling immediately
+                    startPolling(data.token);
                 } else {
                     showError(data.error_description || 'Failed to start login');
                     submitButton.disabled = false;
@@ -352,22 +344,30 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   try {
     console.log('Event:', JSON.stringify(event, null, 2));
     
-    // Handle different endpoints
-    if (event.path === '/authorize/poll') {
+    // Handle polling endpoint - check for both /authorize/poll and /dev/authorize/poll or /main/authorize/poll
+    if (event.path.endsWith('/authorize/poll')) {
       return handlePollLogin(event);
     }
 
     const params = event.queryStringParameters || {};
 
-    // If we have platform_url, handle login start
-    if (params.platform_url) {
+    // Determine if this is a form submission or initial authorization request
+    // Form submissions will have Accept: application/json header (from fetch)
+    // Initial OAuth requests will have Accept: text/html (from browser navigation)
+    const acceptHeader = event.headers?.['Accept'] || event.headers?.['accept'] || '';
+    const isFormSubmission = params.platform_url && acceptHeader.includes('application/json');
+
+    if (isFormSubmission) {
+      // This is a form submission - return JSON response to start login flow
+      console.log('Handling form submission with platform_url:', params.platform_url);
       return handleStartLogin({
         ...event,
         body: JSON.stringify(params)
       });
     }
 
-    // Otherwise show form
+    // Otherwise show the authorization form (initial OAuth request or browser navigation)
+    console.log('Showing authorization form, platform_url provided:', !!params.platform_url);
 
     // First validate base OAuth parameters
     try {
@@ -413,18 +413,21 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Process template variables
     let html = FORM_HTML;
     
-    // First, escape any template variables in JavaScript strings
-    html = html.replace(/\{\{(.*?)\}\}/g, (match, p1) => {
-      // If it's one of our OAuth params, replace it
-      if (['client_id', 'redirect_uri', 'response_type', 'scope', 'state', 'code_challenge', 'code_challenge_method'].includes(p1)) {
-        return (params[p1] || '').toString();
-      }
-      // Otherwise, it's a JavaScript template variable, keep it as is
-      return match;
-    });
+    // Replace template variables with actual values
+    const templateVars: Record<string, string> = {
+      client_id: params.client_id || '',
+      redirect_uri: params.redirect_uri || '',
+      response_type: params.response_type || '',
+      scope: params.scope || '',
+      state: params.state || '',
+      code_challenge: params.code_challenge || '',
+      code_challenge_method: params.code_challenge_method || '',
+      platform_url: params.platform_url || '' // Pre-populate if provided
+    };
     
-    // Now replace any remaining template variables with empty strings
-    html = html.replace(/\{\{.*?\}\}/g, '');
+    html = html.replace(/\{\{(.*?)\}\}/g, (match, p1) => {
+      return templateVars[p1] !== undefined ? templateVars[p1] : '';
+    });
 
     return {
       statusCode: 200,
