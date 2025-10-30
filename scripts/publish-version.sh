@@ -13,6 +13,7 @@ FUNCTIONS=(
   "ib-oauth-token"
   "ib-oauth-userinfo"
   "ib-oauth-proxy"
+  "ib-oauth-well-known"
 )
 
 # Color codes for output

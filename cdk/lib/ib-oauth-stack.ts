@@ -149,6 +149,29 @@ export class IBOAuthStack extends cdk.Stack {
       version: proxyFunction.currentVersion,
     });
 
+    // OAuth Authorization Server Metadata Function
+    const wellKnownFunction = new lambda.Function(this, 'WellKnownFunction', {
+      functionName: 'ib-oauth-well-known',
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset('dist/well-known'),
+      environment: {
+        // No DynamoDB access needed - this is a static metadata endpoint
+      },
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(5),
+    });
+
+    const wellKnownDevAlias = new lambda.Alias(this, 'WellKnownDevAlias', {
+      aliasName: 'dev',
+      version: wellKnownFunction.currentVersion,
+    });
+
+    const wellKnownMainAlias = new lambda.Alias(this, 'WellKnownMainAlias', {
+      aliasName: 'main',
+      version: wellKnownFunction.currentVersion,
+    });
+
     // Grant DynamoDB permissions to all aliases
     stateTable.grantReadWriteData(authorizeDevAlias);
     stateTable.grantReadWriteData(authorizeMainAlias);
@@ -492,6 +515,51 @@ export class IBOAuthStack extends cdk.Stack {
       }]
     });
 
+    // .well-known endpoints for OAuth discovery
+    const wellKnown = api.root.addResource('.well-known');
+    const oauthAuthServer = wellKnown.addResource('oauth-authorization-server');
+
+    oauthAuthServer.addMethod('GET', new apigateway.LambdaIntegration(wellKnownDevAlias, {
+      proxy: true,
+    }), {
+      methodResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Methods': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Content-Type': true,
+          'method.response.header.Cache-Control': true
+        }
+      }]
+    });
+
+    oauthAuthServer.addMethod('OPTIONS', new apigateway.MockIntegration({
+      integrationResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': "'*'",
+          'method.response.header.Access-Control-Allow-Methods': "'GET,OPTIONS'",
+          'method.response.header.Access-Control-Allow-Headers': "'Content-Type,Authorization'",
+          'method.response.header.Content-Type': "'application/json'"
+        }
+      }],
+      passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
+      requestTemplates: {
+        'application/json': '{"statusCode": 200}'
+      }
+    }), {
+      methodResponses: [{
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Origin': true,
+          'method.response.header.Access-Control-Allow-Methods': true,
+          'method.response.header.Access-Control-Allow-Headers': true,
+          'method.response.header.Content-Type': true
+        }
+      }]
+    });
+
     // Create main stage manually
     const mainDeployment = new apigateway.Deployment(this, 'MainDeployment', {
       api: api,
@@ -521,6 +589,8 @@ export class IBOAuthStack extends cdk.Stack {
     userinfoMainAlias.grantInvoke(apiGatewayPrincipal);
     proxyDevAlias.grantInvoke(apiGatewayPrincipal);
     proxyMainAlias.grantInvoke(apiGatewayPrincipal);
+    wellKnownDevAlias.grantInvoke(apiGatewayPrincipal);
+    wellKnownMainAlias.grantInvoke(apiGatewayPrincipal);
 
     // Stack Outputs
     new cdk.CfnOutput(this, 'IBOAuthApiDevEndpoint', {

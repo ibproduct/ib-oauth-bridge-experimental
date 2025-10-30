@@ -2,13 +2,17 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { ZodError } from 'zod';
 import { ibClient } from '../../services/ib-client';
 import { storageService } from '../../services/storage';
-import { 
-  createOAuthError, 
+import {
+  createOAuthError,
   generateErrorRedirect,
   generateAuthCodeRedirect,
   OAuthErrorType,
   BaseAuthorizeParamsSchema
 } from '../../utils/oauth';
+import {
+  getWellKnownClient,
+  validateRedirectUri
+} from '../../config/well-known-clients';
 
 // Embed HTML template directly to avoid filesystem access in Lambda
 // Declare window augmentation for TypeScript
@@ -409,6 +413,82 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       throw error;
     }
 
+    // Validate well-known client
+    // At this point, params have been validated by BaseAuthorizeParamsSchema
+    const clientId = params.client_id!;
+    const redirectUri = params.redirect_uri!;
+    
+    const client = getWellKnownClient(clientId);
+    if (!client) {
+      console.log('Unknown client_id:', clientId);
+      return {
+        statusCode: 302,
+        headers: {
+          Location: generateErrorRedirect(redirectUri, createOAuthError(
+            OAuthErrorType.UNAUTHORIZED_CLIENT,
+            `Unknown client_id. Use the documented client_id: "mcp-public-client"`,
+            params.state
+          ))
+        },
+        body: ''
+      };
+    }
+
+    // Validate redirect URI against client's allowed patterns
+    if (!validateRedirectUri(clientId, redirectUri)) {
+      console.log('Invalid redirect_uri for client:', {
+        client_id: clientId,
+        redirect_uri: redirectUri
+      });
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        },
+        body: JSON.stringify(
+          createOAuthError(
+            OAuthErrorType.INVALID_REQUEST,
+            'redirect_uri does not match allowed patterns for this client'
+          )
+        )
+      };
+    }
+
+    // Validate PKCE for public clients
+    if (client.requires_pkce && !params.code_challenge) {
+      console.log('PKCE required but not provided for public client');
+      return {
+        statusCode: 302,
+        headers: {
+          Location: generateErrorRedirect(redirectUri, createOAuthError(
+            OAuthErrorType.INVALID_REQUEST,
+            'code_challenge is required for public clients (PKCE)',
+            params.state
+          ))
+        },
+        body: ''
+      };
+    }
+
+    // Validate PKCE method is S256
+    if (params.code_challenge && params.code_challenge_method !== 'S256') {
+      console.log('Invalid PKCE method:', params.code_challenge_method);
+      return {
+        statusCode: 302,
+        headers: {
+          Location: generateErrorRedirect(redirectUri, createOAuthError(
+            OAuthErrorType.INVALID_REQUEST,
+            'code_challenge_method must be S256',
+            params.state
+          ))
+        },
+        body: ''
+      };
+    }
+
     // Show platform URL form
     // Process template variables
     let html = FORM_HTML;
@@ -510,6 +590,46 @@ async function handleStartLogin(event: APIGatewayProxyEvent): Promise<APIGateway
           'Access-Control-Allow-Headers': 'Content-Type, Authorization'
         },
         body: JSON.stringify({ error: 'invalid_request', error_description: 'Missing required parameters' })
+      };
+    }
+
+    // Validate well-known client
+    const client = getWellKnownClient(params.client_id);
+    if (!client) {
+      console.log('Unknown client_id in start login:', params.client_id);
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        },
+        body: JSON.stringify({
+          error: 'unauthorized_client',
+          error_description: 'Unknown client_id. Use the documented client_id: "mcp-public-client"'
+        })
+      };
+    }
+
+    // Validate redirect URI
+    if (!validateRedirectUri(params.client_id, params.redirect_uri)) {
+      console.log('Invalid redirect_uri in start login:', {
+        client_id: params.client_id,
+        redirect_uri: params.redirect_uri
+      });
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        },
+        body: JSON.stringify({
+          error: 'invalid_request',
+          error_description: 'redirect_uri does not match allowed patterns for this client'
+        })
       };
     }
 

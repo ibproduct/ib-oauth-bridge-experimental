@@ -9,6 +9,7 @@ import {
 } from '../../utils/oauth';
 import { TokenService } from '../../services/token';
 import { storageService } from '../../services/storage';
+import { getWellKnownClient } from '../../config/well-known-clients';
 
 const tokenService = new TokenService();
 
@@ -59,6 +60,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const params = Object.fromEntries(new URLSearchParams(event.body));
     console.log('Parsed form data:', params);
     const validatedParams = validateTokenParams(params);
+
+    // Validate well-known client
+    const client = getWellKnownClient(validatedParams.client_id);
+    if (!client) {
+      console.log('Unknown client_id in token request:', validatedParams.client_id);
+      return errorResponse(createOAuthError(
+        OAuthErrorType.UNAUTHORIZED_CLIENT,
+        'Unknown client_id. Use the documented client_id: "mcp-public-client"'
+      ));
+    }
 
     // Handle different grant types
     if (validatedParams.grant_type === GrantType.AUTHORIZATION_CODE) {
@@ -123,12 +134,28 @@ async function handleAuthorizationCode(
       ));
     }
 
-    // Validate PKCE code verifier if challenge exists
-    if (stateEntry.codeChallenge) {
+    // Get well-known client configuration
+    const client = getWellKnownClient(clientId);
+    if (!client) {
+      return errorResponse(createOAuthError(
+        OAuthErrorType.UNAUTHORIZED_CLIENT,
+        'Unknown client_id'
+      ));
+    }
+
+    // Validate PKCE for public clients
+    if (client.requires_pkce) {
       if (!codeVerifier) {
         return errorResponse(createOAuthError(
           OAuthErrorType.INVALID_REQUEST,
-          'code_verifier required'
+          'code_verifier required for public clients'
+        ));
+      }
+
+      if (!stateEntry.codeChallenge) {
+        return errorResponse(createOAuthError(
+          OAuthErrorType.INVALID_REQUEST,
+          'code_challenge was not provided during authorization'
         ));
       }
 
